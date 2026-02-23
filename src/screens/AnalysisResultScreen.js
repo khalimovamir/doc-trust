@@ -73,6 +73,8 @@ export default function AnalysisResultScreen({ navigation, route }) {
   const [reAnalyzing, setReAnalyzing] = useState(false);
   const lastJurisdictionRef = useRef(profile?.jurisdiction_code);
   const fromJurisdictionRef = useRef(false);
+  const analysisRef = useRef(analysis);
+  analysisRef.current = analysis;
 
   useFocusEffect(
     useCallback(() => {
@@ -163,11 +165,12 @@ export default function AnalysisResultScreen({ navigation, route }) {
 
   const handleMenuAction = useCallback(({ nativeEvent }) => {
     if (nativeEvent.event === 'export') {
-      exportAnalysisToPdf(analysis).catch((e) =>
+      const currentAnalysis = analysisRef.current;
+      exportAnalysisToPdf(currentAnalysis).catch((e) =>
         Alert.alert(t('details.exportFailed'), e?.message || t('details.couldNotCreatePdf'))
       );
     }
-  }, [analysis]);
+  }, [t]);
 
   const onJurisdictionEdit = useCallback(() => {
     fromJurisdictionRef.current = true;

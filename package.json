@@ -13,6 +13,8 @@
     "reset-cache": "rm -rf $TMPDIR/metro-* $TMPDIR/haste-map-* 2>/dev/null; watchman watch-del-all 2>/dev/null; npx expo start --clear",
     "android": "expo run:android",
     "android:emulator": "JAVA_HOME=\"/Applications/Android Studio.app/Contents/jbr/Contents/Home\" ANDROID_HOME=\"$HOME/Library/Android/sdk\" REACT_NATIVE_PACKAGER_HOSTNAME=10.0.2.2 PATH=\"/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin:$HOME/Library/Android/sdk/emulator:$HOME/Library/Android/sdk/platform-tools:$PATH\" npx expo run:android",
+    "android:uninstall": "adb uninstall com.anonymous.ailawyer 2>/dev/null || true",
+    "android:build": "npx eas-cli build --platform android --profile production",
     "ios": "expo run:ios",
     "ios:dev": "env -u CI npx expo run:ios",
     "ios:build": "npx eas-cli build --platform ios --profile production",
@@ -34,6 +36,7 @@
     "expo-apple-authentication": "~8.0.8",
     "expo-application": "~7.0.8",
     "expo-auth-session": "~7.0.10",
+    "expo-camera": "~17.0.10",
     "expo-clipboard": "~8.0.8",
     "expo-dev-client": "~6.0.20",
     "expo-document-picker": "~14.0.8",
@@ -62,6 +65,7 @@
   "private": true,
   "devDependencies": {
     "@types/react": "~19.1.10",
+    "eas-cli": "^13.0.0",
     "jest": "^30.2.0",
     "typescript": "~5.9.2"
   }

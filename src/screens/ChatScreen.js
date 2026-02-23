@@ -3,7 +3,7 @@
  * Shown when navigating from Details (Ask AI) - back returns to Details
  */
 
-import React, { useLayoutEffect, useMemo } from 'react';
+import React, { useLayoutEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View, Platform, Alert } from 'react-native';
 import { ChevronLeft, EllipsisVertical } from 'lucide-react-native';
@@ -18,6 +18,11 @@ export default function ChatScreen({ navigation }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const { chatPrompt, chatContext, currentChatId, setRefreshChatTrigger } = useAILawyerChat();
+  const currentChatIdRef = useRef(currentChatId);
+  currentChatIdRef.current = currentChatId;
+  const setRefreshChatTriggerRef = useRef(setRefreshChatTrigger);
+  setRefreshChatTriggerRef.current = setRefreshChatTrigger;
+
   const chatMenuActions = useMemo(
     () => [
       {
@@ -31,7 +36,8 @@ export default function ChatScreen({ navigation }) {
   );
 
   const handleMenuAction = ({ nativeEvent }) => {
-    if (nativeEvent.event === 'clear' && currentChatId) {
+    const chatId = currentChatIdRef.current;
+    if (nativeEvent.event === 'clear' && chatId) {
       Alert.alert(
         t('aiLawyer.clearChatTitle'),
         t('aiLawyer.clearChatMessage'),
@@ -42,8 +48,8 @@ export default function ChatScreen({ navigation }) {
             style: 'destructive',
             onPress: async () => {
               try {
-                await deleteMessagesExceptFirst(currentChatId);
-                setRefreshChatTrigger((prev) => prev + 1);
+                await deleteMessagesExceptFirst(chatId);
+                setRefreshChatTriggerRef.current((prev) => prev + 1);
               } catch (_) {}
             },
           },

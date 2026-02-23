@@ -131,6 +131,17 @@ export async function dismissUserOffer(userId, offerId) {
 }
 
 /**
+ * Parse percentage from offer subtitle (e.g. "50%", "50% OFF") for fallback discount.
+ */
+function parsePercentFromSubtitle(subtitle) {
+  if (subtitle == null || typeof subtitle !== 'string') return null;
+  const match = subtitle.match(/(\d+)\s*%?/);
+  if (!match) return null;
+  const n = parseInt(match[1], 10);
+  return Number.isFinite(n) && n > 0 && n <= 100 ? n : null;
+}
+
+/**
  * Apply offer discount to price_cents (for display on Subscription screen)
  */
 export function applyOfferDiscount(priceCents, offer) {
@@ -140,6 +151,10 @@ export function applyOfferDiscount(priceCents, offer) {
   }
   if (offer.discount_type === 'fixed' && (offer.discount_cent != null)) {
     return Math.max(0, priceCents - Number(offer.discount_cent));
+  }
+  const perc = parsePercentFromSubtitle(offer.subtitle);
+  if (perc != null) {
+    return Math.round(priceCents * (1 - perc / 100));
   }
   return priceCents;
 }

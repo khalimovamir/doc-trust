@@ -53,8 +53,10 @@ function getRiskLabelKey(score) {
 
 const SCREEN_HEIGHT = (() => {
   try {
-    const h = Dimensions.get('window').height;
-    return typeof h === 'number' && h > 0 ? h : 800;
+    const w = Dimensions.get('window');
+    const h = w?.height;
+    const n = Number(h);
+    return Number.isFinite(n) && n > 0 ? n : 800;
   } catch {
     return 800;
   }
@@ -139,7 +141,7 @@ export default function HomeScreen({ navigation }) {
   const [currentOffer, setCurrentOffer] = useState(null);
   const [userOfferState, setUserOfferState] = useState(null);
   const [countdown, setCountdown] = useState({ h: 0, m: 0, s: 0 });
-  const sheetTranslateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const sheetTranslateY = useRef(new Animated.Value(Number(SCREEN_HEIGHT) || 800)).current;
 
   const activeOffer = offers?.[0] ?? null;
   const showBanner = !isPro && !!activeOffer;
@@ -211,7 +213,8 @@ export default function HomeScreen({ navigation }) {
     }
     getAnalysesForUserWithCache(user.id)
       .then((data) => {
-        const items = data.slice(0, 3).map((a) => {
+        const list = Array.isArray(data) ? data : [];
+        const items = list.slice(0, 3).map((a) => {
           const tags = [a.documentType || t('home.document')];
           if (a.risksCount > 0) tags.push(`${a.risksCount} ${t('home.risks')}`);
           if (a.tipsCount > 0) tags.push(`${a.tipsCount} ${t('home.tips')}`);
@@ -245,7 +248,7 @@ export default function HomeScreen({ navigation }) {
       setUserOfferState(null);
     }
     setIsOfferSheetVisible(true);
-    sheetTranslateY.setValue(SCREEN_HEIGHT);
+    sheetTranslateY.setValue(Number(SCREEN_HEIGHT) || 800);
     Animated.timing(sheetTranslateY, {
       toValue: 0,
       duration: 250,
@@ -258,8 +261,9 @@ export default function HomeScreen({ navigation }) {
     }
     setCurrentOffer(null);
     setUserOfferState(null);
+    const h = Number(SCREEN_HEIGHT) || 800;
     Animated.timing(sheetTranslateY, {
-      toValue: SCREEN_HEIGHT,
+      toValue: h,
       duration: 220,
       useNativeDriver: false,
     }).start(({ finished }) => {
@@ -268,8 +272,9 @@ export default function HomeScreen({ navigation }) {
   };
   const handleGetOffer = () => {
     const offerToPass = currentOffer ?? activeOffer;
+    const h = Number(SCREEN_HEIGHT) || 800;
     Animated.timing(sheetTranslateY, {
-      toValue: SCREEN_HEIGHT,
+      toValue: h,
       duration: 220,
       useNativeDriver: false,
     }).start(({ finished }) => {
@@ -290,14 +295,24 @@ export default function HomeScreen({ navigation }) {
   };
   const panResponder = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponderCapture: (_, gesture) =>
-        gesture.dy > 8 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+      onMoveShouldSetPanResponderCapture: (_, gesture) => {
+        const dy = Number(gesture.dy);
+        const dx = Number(gesture.dx);
+        return Number.isFinite(dy) && dy > 8 && Math.abs(dy) > Math.abs(Number.isFinite(dx) ? dx : 0);
+      },
       onPanResponderMove: (_, gesture) => {
-        const y = typeof gesture.dy === 'number' ? gesture.dy : 0;
-        sheetTranslateY.setValue(y >= 0 ? y : Math.max(-30, y));
+        const y = Number(gesture.dy);
+        const val = Number.isFinite(y) ? (y >= 0 ? y : Math.max(-30, y)) : 0;
+        sheetTranslateY.setValue(val);
       },
       onPanResponderRelease: (_, gesture) => {
-        if (gesture.dy > 100 || gesture.vy > 0.8) {
+        const dy = Number(gesture.dy);
+        const vy = Number(gesture.vy);
+        if (Number.isFinite(dy) && dy > 100) {
+          closeOfferSheet();
+          return;
+        }
+        if (Number.isFinite(vy) && vy > 0.8) {
           closeOfferSheet();
           return;
         }
@@ -777,7 +792,7 @@ function createStyles(colors) {
     sectionTitle: {
       fontFamily,
       fontSize: 20,
-      fontWeight: '600',
+      fontWeight: Platform.OS === 'android' ? '700' : '600',
       color: colors.primaryText,
     },
     seeAll: {
@@ -800,7 +815,7 @@ function createStyles(colors) {
     scanCardTitle: {
       fontFamily,
       fontSize: 16,
-      fontWeight: '500',
+      fontWeight: Platform.OS === 'android' ? '600' : '500',
       color: colors.primaryText,
       marginBottom: spacing.xs,
     },

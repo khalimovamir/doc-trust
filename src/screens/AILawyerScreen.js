@@ -145,17 +145,22 @@ export default function AILawyerScreen({ navigation }) {
     } catch (_) {}
   };
 
+  const currentChatIdRef = React.useRef(currentChatId);
+  currentChatIdRef.current = currentChatId;
+
   const handleClearChat = React.useCallback(async () => {
-    if (!currentChatId) return;
+    const chatId = currentChatIdRef.current;
+    if (!chatId) return;
     try {
       const { deleteMessagesExceptFirst } = await import('../lib/chat');
-      await deleteMessagesExceptFirst(currentChatId);
+      await deleteMessagesExceptFirst(chatId);
       setRefreshChatTrigger((p) => p + 1);
     } catch (_) {}
-  }, [currentChatId, setRefreshChatTrigger]);
+  }, [setRefreshChatTrigger]);
 
   const handleMenuAction = ({ nativeEvent }) => {
-    if (nativeEvent.event === 'clear' && currentChatId) {
+    const chatId = currentChatIdRef.current;
+    if (nativeEvent.event === 'clear' && chatId) {
       Alert.alert(
         t('aiLawyer.clearChatTitle'),
         t('aiLawyer.clearChatMessage'),

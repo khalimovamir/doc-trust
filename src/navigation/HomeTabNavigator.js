@@ -28,6 +28,11 @@ function HomeTabNavigatorInner() {
         tabBarActiveTintColor: colors?.primary ?? '#3b82f6',
         tabBarInactiveTintColor: colors?.secondaryText ?? '#6b7280',
         tabBarStyle: { backgroundColor: colors?.secondaryBackground ?? '#ffffff' },
+        ...(Platform.OS === 'android' && {
+          tabBarIconStyle: { width: 24, height: 24 },
+          tabBarLabelVisibilityMode: 'labeled',
+          detachInactiveScreens: false,
+        }),
       }}
     >
       <Tab.Screen
@@ -40,9 +45,10 @@ function HomeTabNavigatorInner() {
               type: 'sfSymbol',
               name: focused ? 'square.grid.2x2.fill' : 'square.grid.2x2',
             }),
-            default: ({ focused }) => ({
+            default: () => ({
               type: 'materialSymbol',
               name: 'grid_view',
+              weight: 400,
             }),
           }),
         }}
@@ -57,9 +63,10 @@ function HomeTabNavigatorInner() {
               type: 'sfSymbol',
               name: focused ? 'clock.fill' : 'clock',
             }),
-            default: ({ focused }) => ({
+            default: () => ({
               type: 'materialSymbol',
               name: 'schedule',
+              weight: 400,
             }),
           }),
         }}
@@ -76,9 +83,10 @@ function HomeTabNavigatorInner() {
               type: 'sfSymbol',
               name: 'sparkles',
             },
-            default: ({ focused }) => ({
+            default: () => ({
               type: 'materialSymbol',
               name: 'auto_awesome',
+              weight: 400,
             }),
           }),
         }}
@@ -93,9 +101,10 @@ function HomeTabNavigatorInner() {
               type: 'sfSymbol',
               name: focused ? 'gearshape.fill' : 'gearshape',
             }),
-            default: ({ focused }) => ({
+            default: () => ({
               type: 'materialSymbol',
               name: 'settings',
+              weight: 400,
             }),
           }),
         }}

@@ -233,7 +233,7 @@ function createStyles(colors) {
     cardTitle: {
       fontFamily,
       fontSize: 16,
-      fontWeight: '500',
+      fontWeight: Platform.OS === 'android' ? '600' : '500',
       color: colors.primaryText,
       marginBottom: spacing.xs,
     },

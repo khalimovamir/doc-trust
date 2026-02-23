@@ -187,8 +187,8 @@ function FullscreenImageViewer({ uri, onClose, styles }) {
           const dy = Number(touches[0].pageY) - Number(startY.current);
           const tx = Number(baseTranslateX.current) + (Number.isNaN(dx) ? 0 : dx);
           const ty = Number(baseTranslateY.current) + (Number.isNaN(dy) ? 0 : dy);
-          translateX.setValue(tx);
-          translateY.setValue(ty);
+          translateX.setValue(Number.isFinite(tx) ? tx : 0);
+          translateY.setValue(Number.isFinite(ty) ? ty : 0);
           startX.current = touches[0].pageX;
           startY.current = touches[0].pageY;
         }
@@ -298,16 +298,22 @@ export default function ChatView({ chatPrompt, chatContext }) {
       onPanResponderRelease: (_, g) => {
         const closeThreshold = 80;
         const velocityThreshold = 0.4;
-        if (g.dy > closeThreshold || g.vy > velocityThreshold) {
+        const dy = Number(g.dy);
+        const vy = Number(g.vy);
+        if (Number.isFinite(dy) && dy > closeThreshold) {
           closeContextSheet();
-        } else {
-          Animated.spring(sheetTranslateY, {
-            toValue: 0,
-            useNativeDriver: false,
-            tension: 65,
-            friction: 11,
-          }).start();
+          return;
         }
+        if (Number.isFinite(vy) && vy > velocityThreshold) {
+          closeContextSheet();
+          return;
+        }
+        Animated.spring(sheetTranslateY, {
+          toValue: 0,
+          useNativeDriver: false,
+          tension: 65,
+          friction: 11,
+        }).start();
       },
     })
   ).current;

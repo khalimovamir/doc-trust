@@ -61,7 +61,7 @@ function createStyles(colors) {
     planSubtitle: { fontFamily, fontSize: 16, fontWeight: '400', color: colors.secondaryText },
     planPricing: { alignItems: 'flex-end', gap: 4 },
     planPrice: { fontFamily, fontSize: 20, fontWeight: '700', color: colors.primaryText },
-    planPriceOld: { fontFamily, fontSize: 14, fontWeight: '400', color: colors.secondaryText },
+    planPriceOld: { fontFamily, fontSize: 14, fontWeight: '400', color: colors.secondaryText, textDecorationLine: 'line-through' },
     planPricePerMonth: { fontFamily, fontSize: 16, fontWeight: '400', color: colors.secondaryText },
     offerDiscountText: { fontFamily, fontSize: 14, fontWeight: '400', color: colors.primary, marginHorizontal: 16, marginBottom: 16 },
     footer: { paddingHorizontal: spacing.md, paddingBottom: spacing.md, gap: spacing.sm },

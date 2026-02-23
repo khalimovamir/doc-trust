@@ -106,7 +106,11 @@ function AppNavigatorInner() {
   return (
     <AILawyerChatProvider>
       <AppStack.Navigator screenOptions={{ headerShown: false }}>
-        <AppStack.Screen name="Home" component={HomeTabNavigator} />
+        <AppStack.Screen
+          name="Home"
+          component={HomeTabNavigator}
+          options={{ freezeOnBlur: false }}
+        />
         <AppStack.Screen
           name="Details"
           component={DetailsScreen}

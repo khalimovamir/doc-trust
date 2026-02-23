@@ -343,6 +343,8 @@ function getSeverityConfig(colors) {
 const RING_SIZE_DEFAULT = 80;
 const RING_STROKE_DEFAULT = 6;
 
+const SCORE_RING_ANIM_DURATION_MS = 800;
+
 function ScoreRing({ score, size = RING_SIZE_DEFAULT, styles, colors }) {
   const numScore = Number(score);
   const safeScore = Number.isNaN(numScore) ? 0 : Math.min(100, Math.max(0, numScore));
@@ -355,8 +357,39 @@ function ScoreRing({ score, size = RING_SIZE_DEFAULT, styles, colors }) {
   const circumference = Math.max(0, 2 * Math.PI * R);
   const scoreColor =
     safeScore >= 70 ? colors.success : safeScore >= 50 ? colors.warning : colors.error;
-  const dashOffset = Math.max(0, Math.min(circumference, circumference * (1 - safeScore / 100)));
+  const targetDashOffset = Math.max(0, Math.min(circumference, circumference * (1 - safeScore / 100)));
   const textSize = safeSize <= 56 ? 14 : 20;
+
+  const [animProgress, setAnimProgress] = useState(0);
+  const animStartRef = useRef(null);
+  const rafRef = useRef(null);
+
+  useEffect(() => {
+    setAnimProgress(0);
+    animStartRef.current = null;
+    let cancelled = false;
+    const start = () => {
+      if (cancelled) return;
+      const now = Date.now();
+      if (animStartRef.current == null) animStartRef.current = now;
+      const elapsed = now - animStartRef.current;
+      const t = Math.min(1, elapsed / SCORE_RING_ANIM_DURATION_MS);
+      const ease = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) * (-2 * t + 2) / 2;
+      setAnimProgress(ease);
+      if (t < 1) {
+        rafRef.current = requestAnimationFrame(start);
+      }
+    };
+    rafRef.current = requestAnimationFrame(start);
+    return () => {
+      cancelled = true;
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    };
+  }, [safeScore]);
+
+  const dashOffset = circumference * (1 - animProgress * (safeScore / 100));
+  const displayScore = Math.round(animProgress * safeScore);
+  const safeDashOffset = Number.isFinite(dashOffset) ? Math.max(0, Math.min(circumference, dashOffset)) : targetDashOffset;
 
   return (
     <View style={[styles.scoreRing, { width: safeSize, height: safeSize }]}>
@@ -377,13 +410,13 @@ function ScoreRing({ score, size = RING_SIZE_DEFAULT, styles, colors }) {
           strokeWidth={stroke}
           fill="none"
           strokeDasharray={`${circumference} ${circumference}`}
-          strokeDashoffset={dashOffset}
+          strokeDashoffset={safeDashOffset}
           strokeLinecap="round"
           transform={`rotate(-90, ${CX}, ${CY})`}
         />
       </Svg>
       <View style={styles.scoreRingTextWrap}>
-        <Text style={[styles.scoreText, { fontSize: textSize }]}>{Math.round(safeScore)}</Text>
+        <Text style={[styles.scoreText, { fontSize: textSize }]}>{displayScore}</Text>
       </View>
     </View>
   );
@@ -621,6 +654,8 @@ export default function DetailsScreen({ navigation, route }) {
   const styles = useMemo(() => StyleSheet.create(createStyles(colors)), [colors]);
   const severityConfig = useMemo(() => getSeverityConfig(colors), [colors]);
   const issueTypeConfig = useMemo(() => getIssueTypeConfig(colors), [colors]);
+  const analysisRef = useRef(analysis);
+  analysisRef.current = analysis;
 
   useEffect(() => {
     if (!analysisId) return;
@@ -679,6 +714,7 @@ export default function DetailsScreen({ navigation, route }) {
   );
 
   const handleMenuAction = ({ nativeEvent }) => {
+    const currentAnalysis = analysisRef.current;
     if (nativeEvent.event === 'delete') {
       Alert.alert(
         t('details.deleteTitle'),
@@ -692,13 +728,13 @@ export default function DetailsScreen({ navigation, route }) {
     if (nativeEvent.event === 'share' || nativeEvent.event === 'export') {
       const isShare = nativeEvent.event === 'share';
       const dialogTitle = isShare ? t('details.share') : t('details.exportPdf');
-      exportAnalysisToPdf(analysis, { dialogTitle }).catch((e) =>
+      exportAnalysisToPdf(currentAnalysis, { dialogTitle }).catch((e) =>
         Alert.alert(t('details.exportFailed'), e?.message || t('details.couldNotCreatePdf'))
       );
     }
     if (nativeEvent.event === 'compare') {
-      const title = analysis?.title || analysis?.documentType || 'Document';
-      const text_content = analysis?.text_content ?? '';
+      const title = currentAnalysis?.title || currentAnalysis?.documentType || 'Document';
+      const text_content = currentAnalysis?.text_content ?? '';
       navigation.navigate('CompareDocs', { text_content, title });
     }
   };

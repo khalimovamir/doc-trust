@@ -328,7 +328,7 @@ function createStyles(colors) {
     profileName: {
       fontFamily,
       fontSize: 20,
-      fontWeight: '500',
+      fontWeight: Platform.OS === 'android' ? '700' : '500',
       color: colors.primaryText,
     },
     profileEmail: {
@@ -354,7 +354,7 @@ function createStyles(colors) {
     proTitle: {
       fontFamily,
       fontSize: 20,
-      fontWeight: '600',
+      fontWeight: Platform.OS === 'android' ? '700' : '600',
       color: colors.primaryText,
     },
     upgradeBtn: {
@@ -396,7 +396,7 @@ function createStyles(colors) {
     sectionLabel: {
       fontFamily,
       fontSize: 14,
-      fontWeight: '500',
+      fontWeight: Platform.OS === 'android' ? '600' : '500',
       color: colors.secondaryText,
     },
     rowCard: {
@@ -432,7 +432,7 @@ function createStyles(colors) {
     rowTitle: {
       fontFamily,
       fontSize: 16,
-      fontWeight: '400',
+      fontWeight: Platform.OS === 'android' ? '600' : '400',
       color: colors.primaryText,
     },
     rowTitleDanger: {

@@ -35,6 +35,9 @@ export function initSentry() {
 
 export function wrapRootComponent(RootComponent) {
   if (!initialized) return RootComponent;
+  if (require('react-native').Platform.OS === 'android') {
+    return RootComponent;
+  }
   try {
     const Sentry = require('@sentry/react-native');
     return Sentry.wrap(RootComponent);

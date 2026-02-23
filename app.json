@@ -50,7 +50,13 @@
       "expo-web-browser",
       "expo-image-picker",
       "expo-localization",
-      "expo-media-library"
+      "expo-media-library",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Doc Trust to access your camera"
+        }
+      ]
     ],
     "extra": {
       "eas": {
