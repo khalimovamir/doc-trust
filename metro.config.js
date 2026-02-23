@@ -1,8 +1,8 @@
 /**
  * Metro config for Expo.
- * expo/metro-config — официальный способ в Expo (внутри это @expo/metro-config).
+ * Extends @expo/metro-config so assets and native deps are resolved correctly in EAS Build.
  */
-const { getDefaultConfig } = require('expo/metro-config');
+const { getDefaultConfig } = require('@expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
 
