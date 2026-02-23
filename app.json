@@ -51,6 +51,7 @@
       "expo-image-picker",
       "expo-localization",
       "expo-media-library",
+      ["@sentry/react-native/expo", { "organization": "", "project": "", "url": "https://sentry.io/" }],
       [
         "expo-camera",
         {
