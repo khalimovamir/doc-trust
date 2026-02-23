@@ -13,12 +13,13 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { fontFamily, spacing, borderRadius, useTheme } from '../theme';
 import { useAILawyerTab } from '../context/AILawyerTabContext';
 import { useAuth } from '../context/AuthContext';
-import { getAnalysesForUser } from '../lib/documents';
+import { getAnalysesForUserWithCache } from '../lib/documents';
 import { formatDateShort } from '../lib/dateFormat';
 import { ScoreRing, detailsCreateStyles } from './DetailsScreen';
 import { SkeletonCard } from '../components/Skeleton';
@@ -31,8 +32,10 @@ const FILTER_IDS = [
 ];
 
 function getRiskLabelKey(score) {
-  if (score < 50) return 'home.highRisk';
-  if (score < 70) return 'home.mediumRisk';
+  const s = Number(score);
+  if (Number.isNaN(s)) return 'home.lowRisk';
+  if (s < 50) return 'home.highRisk';
+  if (s < 70) return 'home.mediumRisk';
   return 'home.lowRisk';
 }
 
@@ -42,12 +45,12 @@ function HistoryCard({ item, onPress, cardStyles, scoreRingStyles, colors }) {
   return (
     <TouchableOpacity style={s.card} onPress={() => onPress(item)} activeOpacity={0.7}>
       <View style={s.cardLeft}>
-        <ScoreRing score={item.score} size={56} styles={scoreRingStyles} colors={colors} />
+        <ScoreRing score={item.score ?? 0} size={56} styles={scoreRingStyles} colors={colors} />
       </View>
       <View style={s.cardContent}>
         <Text style={s.cardTitle}>{item.title}</Text>
         <View style={s.cardTags}>
-          {item.tags.map((tag, i) => (
+          {(item.tags || []).map((tag, i) => (
             <View key={i} style={s.tag}>
               <Text style={s.tagText}>{tag}</Text>
             </View>
@@ -78,7 +81,7 @@ export default function HistoryScreen({ navigation }) {
       return;
     }
     setLoading(true);
-    getAnalysesForUser(user.id)
+    getAnalysesForUserWithCache(user.id)
       .then((data) => {
         setItems(
           data.map((a) => {
@@ -91,7 +94,7 @@ export default function HistoryScreen({ navigation }) {
               title: a.documentType || t('home.document'),
               tags,
               date: formatDateShort(a.createdAt),
-              score: a.score,
+              score: a.score ?? 0,
             };
           })
         );
@@ -180,7 +183,7 @@ function createStyles(colors) {
       paddingBottom: spacing.sm,
       backgroundColor: colors.primaryBackground,
     },
-    headerTitle: { fontFamily, fontSize: 24, fontWeight: '700', color: colors.primaryText },
+    headerTitle: { fontFamily, fontSize: 24, fontWeight: Platform.OS === 'android' ? '800' : '700', color: colors.primaryText },
     scroll: { flex: 1 },
     filtersSection: {
       paddingTop: 12,
@@ -198,7 +201,7 @@ function createStyles(colors) {
     scrollContent: {
       paddingHorizontal: spacing.md,
       paddingTop: spacing.xs,
-      paddingBottom: 100,
+      paddingBottom: Platform.OS === 'android' ? 100 + 24 : 100,
     },
     skeletonCard: {
       marginBottom: spacing.sm,

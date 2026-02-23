@@ -19,6 +19,7 @@ import {
   Animated,
   PanResponder,
   Dimensions,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -37,18 +38,28 @@ import { useAILawyerTab } from '../context/AILawyerTabContext';
 import { useAuth } from '../context/AuthContext';
 import { useSubscription } from '../context/SubscriptionContext';
 import { dismissUserOffer } from '../lib/subscription';
-import { getAnalysesForUser } from '../lib/documents';
+import { getAnalysesForUserWithCache } from '../lib/documents';
 import { ScoreRing, detailsCreateStyles } from './DetailsScreen';
 
 import { formatDateShort } from '../lib/dateFormat';
 
 function getRiskLabelKey(score) {
-  if (score < 50) return 'home.highRisk';
-  if (score < 70) return 'home.mediumRisk';
+  const s = Number(score);
+  if (Number.isNaN(s)) return 'home.lowRisk';
+  if (s < 50) return 'home.highRisk';
+  if (s < 70) return 'home.mediumRisk';
   return 'home.lowRisk';
 }
 
-const SCREEN_HEIGHT = Dimensions.get('window').height;
+const SCREEN_HEIGHT = (() => {
+  try {
+    const h = Dimensions.get('window').height;
+    return typeof h === 'number' && h > 0 ? h : 800;
+  } catch {
+    return 800;
+  }
+})();
+
 
 function computeCountdown(expiresAt) {
   if (!expiresAt) return { h: 0, m: 0, s: 0 };
@@ -84,12 +95,12 @@ function ScanItemCard({ item, onPress, cardStyles, scoreRingStyles, colors }) {
   return (
     <TouchableOpacity style={s.scanCard} onPress={() => onPress(item)} activeOpacity={0.7}>
       <View style={s.scanCardLeft}>
-        <ScoreRing score={item.score} size={56} styles={scoreRingStyles} colors={colors} />
+        <ScoreRing score={item.score ?? 0} size={56} styles={scoreRingStyles} colors={colors} />
       </View>
       <View style={s.scanCardContent}>
         <Text style={s.scanCardTitle}>{item.title}</Text>
         <View style={s.scanCardTags}>
-          {item.tags.map((tag, i) => (
+          {(item.tags || []).map((tag, i) => (
             <View key={i} style={s.tag}>
               <Text style={s.tagText}>{tag}</Text>
             </View>
@@ -101,10 +112,12 @@ function ScanItemCard({ item, onPress, cardStyles, scoreRingStyles, colors }) {
   );
 }
 
-const FALLBACK_FEATURE_KEYS = [
-  { feature: 'document_check', titleKey: 'settings.proFeatureDocumentCheck' },
-  { feature: 'ai_lawyer', titleKey: 'settings.proFeatureAILawyer' },
-  { feature: 'document_compare', titleKey: 'settings.proFeatureDocumentCompare' },
+// Фиксированные 4 пункта для bottom sheet оффера (только переводы, не из БД)
+const OFFER_SHEET_FEATURES = [
+  { feature: 'ai_issue_detection', titleKey: 'home.offerFeature1', freeHas: true },   // AI Issue Detection — ✓ FREE, ✓ PRO
+  { feature: 'document_check', titleKey: 'home.offerFeature2', freeHas: false },      // Unlimited document checking
+  { feature: 'ai_lawyer', titleKey: 'home.offerFeature3', freeHas: false },           // Smart AI Lawyer assistant
+  { feature: 'document_compare', titleKey: 'home.offerFeature4', freeHas: false },   // Unlimited document comparing
 ];
 
 export default function HomeScreen({ navigation }) {
@@ -117,8 +130,6 @@ export default function HomeScreen({ navigation }) {
   const {
     isPro,
     offers,
-    features,
-    limits,
     products,
     ensureOfferState,
   } = useSubscription();
@@ -156,18 +167,10 @@ export default function HomeScreen({ navigation }) {
     return () => clearInterval(id);
   }, [bannerExpiresAt]);
 
-  const displayFeatures = features?.length
-    ? features.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-    : FALLBACK_FEATURE_KEYS;
+  // В bottom sheet оффера всегда эти 4 пункта из переводов (не из Supabase)
+  const displayFeatures = OFFER_SHEET_FEATURES;
 
-  const getFeatureFreeHas = (featKey) => {
-    const lim = limits[`free_${featKey}`];
-    return lim?.is_unlimited || (lim?.monthly_limit ?? 0) > 0;
-  };
-  const getFeatureProHas = (featKey) => {
-    const lim = limits[`pro_${featKey}`];
-    return lim?.is_unlimited || (lim?.monthly_limit ?? 0) > 0;
-  };
+  const getFeatureFreeHas = (f) => f.freeHas === true;
 
   useFocusEffect(
     React.useCallback(() => {
@@ -206,7 +209,7 @@ export default function HomeScreen({ navigation }) {
       setRecentScans([]);
       return;
     }
-    getAnalysesForUser(user.id)
+    getAnalysesForUserWithCache(user.id)
       .then((data) => {
         const items = data.slice(0, 3).map((a) => {
           const tags = [a.documentType || t('home.document')];
@@ -218,7 +221,7 @@ export default function HomeScreen({ navigation }) {
             title: a.documentType || t('home.document'),
             tags,
             date: formatDateShort(a.createdAt),
-            score: a.score,
+            score: a.score ?? 0,
           };
         });
         setRecentScans(items);
@@ -246,7 +249,7 @@ export default function HomeScreen({ navigation }) {
     Animated.timing(sheetTranslateY, {
       toValue: 0,
       duration: 250,
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start();
   };
   const closeOfferSheet = () => {
@@ -258,22 +261,26 @@ export default function HomeScreen({ navigation }) {
     Animated.timing(sheetTranslateY, {
       toValue: SCREEN_HEIGHT,
       duration: 220,
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start(({ finished }) => {
       if (finished) setIsOfferSheetVisible(false);
     });
   };
   const handleGetOffer = () => {
+    const offerToPass = currentOffer ?? activeOffer;
     Animated.timing(sheetTranslateY, {
       toValue: SCREEN_HEIGHT,
       duration: 220,
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start(({ finished }) => {
       if (finished) {
         setIsOfferSheetVisible(false);
         const parent = navigation.getParent();
         if (parent) {
-          parent.navigate('Subscription');
+          parent.navigate('Subscription', {
+            fromOffer: true,
+            offerId: offerToPass?.id ?? null,
+          });
         }
       }
     });
@@ -286,8 +293,8 @@ export default function HomeScreen({ navigation }) {
       onMoveShouldSetPanResponderCapture: (_, gesture) =>
         gesture.dy > 8 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
       onPanResponderMove: (_, gesture) => {
-        const y = gesture.dy >= 0 ? gesture.dy : Math.max(-30, gesture.dy);
-        sheetTranslateY.setValue(y);
+        const y = typeof gesture.dy === 'number' ? gesture.dy : 0;
+        sheetTranslateY.setValue(y >= 0 ? y : Math.max(-30, y));
       },
       onPanResponderRelease: (_, gesture) => {
         if (gesture.dy > 100 || gesture.vy > 0.8) {
@@ -296,7 +303,7 @@ export default function HomeScreen({ navigation }) {
         }
         Animated.spring(sheetTranslateY, {
           toValue: 0,
-          useNativeDriver: true,
+          useNativeDriver: false,
           tension: 80,
           friction: 12,
         }).start();
@@ -384,10 +391,7 @@ export default function HomeScreen({ navigation }) {
       >
         <Pressable style={styles.offerSheetBackdrop} onPress={closeOfferSheet} />
         <Animated.View
-          style={[
-            styles.offerSheetColumn,
-            { transform: [{ translateY: sheetTranslateY }] },
-          ]}
+          style={[styles.offerSheetColumn, { transform: [{ translateY: sheetTranslateY }] }]}
           {...panResponder.panHandlers}
         >
           <View style={styles.offerCloseRow}>
@@ -416,7 +420,7 @@ export default function HomeScreen({ navigation }) {
             </View>
           </View>
 
-          <Text style={styles.offerSheetTitle}>{currentOffer?.title || activeOffer?.title || t('home.temporaryDiscount')}</Text>
+          <Text style={styles.offerSheetTitle}>{t('home.temporaryDiscount')}</Text>
 
           {/* Header row */}
           <View style={styles.offerTableHeaderRow}>
@@ -440,7 +444,7 @@ export default function HomeScreen({ navigation }) {
             </View>
             <View style={styles.offerFreeCol}>
               {displayFeatures.map((f, i) => {
-                const has = getFeatureFreeHas(f.feature);
+                const has = getFeatureFreeHas(f);
                 const Icon = has ? IconRosetteDiscountCheckFilled : IconCircleXFilled;
                 const col = has ? '#22c55e' : '#9ca3af';
                 return (
@@ -467,21 +471,21 @@ export default function HomeScreen({ navigation }) {
             const perMonth = Math.round(discounted / 12);
             return (
               <>
-                <Text style={styles.offerPrice}>{formatPrice(discounted, currency)} Yearly</Text>
-                <Text style={styles.offerPriceSub}>Only {formatPrice(perMonth, currency)} for a month</Text>
+                <Text style={styles.offerPrice}>{formatPrice(discounted, currency)} {t('home.offerYearly')}</Text>
+                <Text style={styles.offerPriceSub}>{t('home.offerOnlyPerMonth', { price: formatPrice(perMonth, currency) })}</Text>
               </>
             );
           })()}
 
           <TouchableOpacity style={styles.offerCta} activeOpacity={0.9} onPress={handleGetOffer}>
             <Text style={styles.offerCtaText}>
-              Get {currentOffer?.subtitle || activeOffer?.subtitle || '50% OFF'} Now
+              {t('home.getOfferCta', { discount: currentOffer?.subtitle || activeOffer?.subtitle || '50%' })}
             </Text>
           </TouchableOpacity>
 
           <View style={styles.offerFooterLinks}>
-            <Text style={styles.offerFooterLink}>Terms of Use</Text>
-            <Text style={styles.offerFooterLink}>Privacy Policy</Text>
+            <Text style={styles.offerFooterLink}>{t('subscription.termsOfUse')}</Text>
+            <Text style={styles.offerFooterLink}>{t('subscription.privacyPolicy')}</Text>
           </View>
 
           </View>
@@ -507,12 +511,12 @@ function createStyles(colors) {
     scrollContent: {
       paddingHorizontal: spacing.md,
       paddingTop: spacing.sm,
-      paddingBottom: 64,
+      paddingBottom: Platform.OS === 'android' ? 64 + 24 : 64,
     },
     headerTitle: {
       fontFamily,
       fontSize: 24,
-      fontWeight: '700',
+      fontWeight: Platform.OS === 'android' ? '800' : '700',
       color: colors.primaryText,
     },
     scanArea: {
@@ -608,7 +612,7 @@ function createStyles(colors) {
     },
     offerClose: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
     offerSheet: {
-      backgroundColor: '#0f1a2b',
+      backgroundColor: '#171819',
       borderTopLeftRadius: 24,
       borderTopRightRadius: 24,
       paddingHorizontal: spacing.md,

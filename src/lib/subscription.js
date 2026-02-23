@@ -129,3 +129,17 @@ export async function dismissUserOffer(userId, offerId) {
     .eq('user_id', userId)
     .eq('offer_id', offerId);
 }
+
+/**
+ * Apply offer discount to price_cents (for display on Subscription screen)
+ */
+export function applyOfferDiscount(priceCents, offer) {
+  if (!offer) return priceCents;
+  if (offer.discount_type === 'percent' && (offer.discount_perc != null)) {
+    return Math.round(priceCents * (1 - Number(offer.discount_perc) / 100));
+  }
+  if (offer.discount_type === 'fixed' && (offer.discount_cent != null)) {
+    return Math.max(0, priceCents - Number(offer.discount_cent));
+  }
+  return priceCents;
+}

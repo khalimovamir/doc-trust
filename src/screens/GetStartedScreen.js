@@ -14,13 +14,14 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Mail } from 'lucide-react-native';
 import { fontFamily, useTheme } from '../theme';
-import { signInWithGoogle } from '../lib/auth';
+import { signInWithGoogle, signInWithApple } from '../lib/auth';
 
-const LOGO_SIZE = 56;
+const LOGO_SIZE = 88;
 const LOGO_GAP = 12;
 const TITLE_SIZE = 32;
 const TITLE_GAP = 40;
@@ -58,9 +59,19 @@ export default function GetStartedScreen({ navigation }) {
   const { colors } = useTheme();
   const styles = useMemo(() => StyleSheet.create(createStyles(colors)), [colors]);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
 
-  const handleApple = () => {
-    Alert.alert(t('getStarted.comingSoon'), t('getStarted.appleComingSoon'));
+  const handleApple = async () => {
+    if (Platform.OS !== 'ios') return;
+    setAppleLoading(true);
+    try {
+      await signInWithApple();
+    } catch (e) {
+      if (e?.code === 'ERR_REQUEST_CANCELED') return;
+      Alert.alert(t('getStarted.appleSignInTitle'), e?.message || t('getStarted.appleSignInFailed'));
+    } finally {
+      setAppleLoading(false);
+    }
   };
   const handleGoogle = async () => {
     setGoogleLoading(true);
@@ -96,18 +107,27 @@ export default function GetStartedScreen({ navigation }) {
           />
           <Text style={styles.appName}>{t('common.appName')}</Text>
 
-          <TouchableOpacity
-            style={styles.buttonApple}
-            onPress={handleApple}
-            activeOpacity={0.8}
-          >
-            <Image
-              source={require('../../assets/icon-apple.png')}
-              style={styles.icon}
-              resizeMode="contain"
-            />
-            <Text style={styles.buttonAppleText}>{t('auth.continueWithApple')}</Text>
-          </TouchableOpacity>
+          {Platform.OS === 'ios' && (
+            <TouchableOpacity
+              style={styles.buttonApple}
+              onPress={handleApple}
+              activeOpacity={0.8}
+              disabled={appleLoading}
+            >
+              {appleLoading ? (
+                <ActivityIndicator size="small" color="#ffffff" style={styles.icon} />
+              ) : (
+                <Image
+                  source={require('../../assets/icon-apple.png')}
+                  style={styles.icon}
+                  resizeMode="contain"
+                />
+              )}
+              <Text style={styles.buttonAppleText}>
+                {appleLoading ? t('auth.signingIn') : t('auth.continueWithApple')}
+              </Text>
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             style={styles.buttonOutline}

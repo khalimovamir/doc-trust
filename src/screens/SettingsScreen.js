@@ -15,6 +15,7 @@ import {
   TouchableOpacity,
   Switch,
   Alert,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -279,7 +280,7 @@ function createStyles(colors) {
     headerTitle: {
       fontFamily,
       fontSize: 24,
-      fontWeight: '600',
+      fontWeight: Platform.OS === 'android' ? '800' : '600',
       color: colors.primaryText,
     },
     scroll: {
@@ -288,7 +289,7 @@ function createStyles(colors) {
     scrollContent: {
       paddingTop: 12,
       paddingHorizontal: spacing.md,
-      paddingBottom: 100,
+      paddingBottom: Platform.OS === 'android' ? 100 + 24 : 100,
       gap: spacing.sm,
     },
     profileCard: {

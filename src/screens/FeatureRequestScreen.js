@@ -74,7 +74,7 @@ export default function FeatureRequestScreen({ navigation }) {
         listFeatureRequests(),
         getMyVotedIds(user.id),
       ]);
-      setRequests(list);
+      setRequests(Array.isArray(list) ? list : []);
       setMyVotedIds(voted);
     } catch (e) {
       setError(e?.message ?? 'Failed to load');
@@ -113,7 +113,7 @@ export default function FeatureRequestScreen({ navigation }) {
       const voted = await getMyVotedIds(user.id);
       setMyVotedIds(voted);
       const list = await listFeatureRequests();
-      setRequests(list);
+      setRequests(Array.isArray(list) ? list : []);
     } catch (_) {
       // keep previous state on error
     } finally {

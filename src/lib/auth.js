@@ -1,10 +1,12 @@
 /**
  * AI Lawyer - Auth helpers (Supabase)
- * Email/password, Google OAuth, Forgot password (OTP)
+ * Email/password, Google OAuth, Apple (native id_token), Forgot password (OTP)
  */
 
+import { Platform } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { supabase } from './supabase';
 
 /**
@@ -88,4 +90,49 @@ export async function signInWithGoogle() {
     return (await supabase.auth.getSession()).data.session;
   }
   return null;
+}
+
+/**
+ * Sign in with Apple (iOS only; uses native id_token → Supabase signInWithIdToken)
+ * Requires: Supabase Dashboard Auth → Apple provider with iOS bundle ID as Client ID.
+ * Requires: "Sign in with Apple" capability (expo-apple-authentication plugin).
+ */
+export async function signInWithApple() {
+  if (Platform.OS !== 'ios') {
+    throw new Error('Sign in with Apple is only available on iOS.');
+  }
+  const hasAppleAuth = await AppleAuthentication.isAvailableAsync();
+  if (!hasAppleAuth) {
+    throw new Error('Sign in with Apple is not available on this device.');
+  }
+  const credential = await AppleAuthentication.signInAsync({
+    requestedScopes: [
+      AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+      AppleAuthentication.AppleAuthenticationScope.EMAIL,
+    ],
+  });
+  const { identityToken } = credential;
+  if (!identityToken) {
+    throw new Error('No identity token from Apple.');
+  }
+  const { data, error } = await supabase.auth.signInWithIdToken({
+    provider: 'apple',
+    token: identityToken,
+  });
+  if (error) throw error;
+  if (credential.fullName) {
+    const givenName = credential.fullName?.givenName ?? '';
+    const familyName = credential.fullName?.familyName ?? '';
+    const fullName = [givenName, familyName].filter(Boolean).join(' ') || null;
+    if (fullName && data?.user) {
+      await supabase.auth.updateUser({
+        data: {
+          full_name: fullName,
+          given_name: givenName || undefined,
+          family_name: familyName || undefined,
+        },
+      });
+    }
+  }
+  return data?.session ?? null;
 }

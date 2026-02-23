@@ -22,12 +22,12 @@ export default function Skeleton({ width, height, borderRadius = 8, style, child
         Animated.timing(opacity, {
           toValue: PULSE_MAX,
           duration: PULSE_DURATION,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
         Animated.timing(opacity, {
           toValue: PULSE_MIN,
           duration: PULSE_DURATION,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
       ])
     );

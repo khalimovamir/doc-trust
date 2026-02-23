@@ -1,9 +1,17 @@
 /**
  * Doc Trust - Document & Analysis persistence (Supabase)
  * Schema: documents -> document_versions -> analyses -> analysis_issues, analysis_guidance_items
+ * Offline: analysisCache for last N analyses (see getAnalysisByIdCached, getAnalysesForUserWithCache).
  */
 
 import { supabase } from './supabase';
+import {
+  getCachedAnalysis,
+  setCachedAnalysis,
+  getCachedAnalysisIds,
+  setCachedAnalysisIds,
+  getCachedAnalysesList,
+} from './analysisCache';
 
 function mapDocType(documentType) {
   const t = (documentType || '').toLowerCase();
@@ -230,6 +238,22 @@ export async function getAnalysesForUser(userId) {
 }
 
 /**
+ * Same as getAnalysesForUser but on network failure returns cached list (offline).
+ * On success updates cache order (ids only).
+ * @param {string} userId
+ * @returns {Promise<Array<{ id, documentType, score, createdAt, risksCount, tipsCount }>>}
+ */
+export async function getAnalysesForUserWithCache(userId) {
+  try {
+    const list = await getAnalysesForUser(userId);
+    await setCachedAnalysisIds(list.map((a) => a.id));
+    return list;
+  } catch {
+    return getCachedAnalysesList();
+  }
+}
+
+/**
  * Load full analysis by id (for reopen from history)
  * @param {string} analysisId
  * @returns {Object} analysis in format expected by DetailsScreen
@@ -301,6 +325,24 @@ export async function getAnalysisById(analysisId) {
       is_done: g.is_done,
     })),
   };
+}
+
+/**
+ * Load full analysis by id with offline cache: try cache first, then network; on success write cache.
+ * @param {string} analysisId
+ * @returns {Promise<Object>} analysis in format expected by DetailsScreen
+ */
+export async function getAnalysisByIdCached(analysisId) {
+  const cached = await getCachedAnalysis(analysisId);
+  try {
+    const analysis = await getAnalysisById(analysisId);
+    const ids = await getCachedAnalysisIds();
+    await setCachedAnalysis(analysisId, analysis, ids);
+    return analysis;
+  } catch (err) {
+    if (cached) return cached;
+    throw err;
+  }
 }
 
 /**

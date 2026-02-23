@@ -18,6 +18,7 @@ import { ChevronLeft, Check } from 'lucide-react-native';
 import { fontFamily, spacing, borderRadius, useTheme } from '../theme';
 import IconButton from '../components/IconButton';
 import { useSubscription } from '../context/SubscriptionContext';
+import { applyOfferDiscount } from '../lib/subscription';
 
 function formatPrice(cents, currency = 'USD') {
   const symbol = currency === 'USD' ? '$' : currency;
@@ -60,7 +61,9 @@ function createStyles(colors) {
     planSubtitle: { fontFamily, fontSize: 16, fontWeight: '400', color: colors.secondaryText },
     planPricing: { alignItems: 'flex-end', gap: 4 },
     planPrice: { fontFamily, fontSize: 20, fontWeight: '700', color: colors.primaryText },
+    planPriceOld: { fontFamily, fontSize: 14, fontWeight: '400', color: colors.secondaryText },
     planPricePerMonth: { fontFamily, fontSize: 16, fontWeight: '400', color: colors.secondaryText },
+    offerDiscountText: { fontFamily, fontSize: 14, fontWeight: '400', color: colors.primary, marginHorizontal: 16, marginBottom: 16 },
     footer: { paddingHorizontal: spacing.md, paddingBottom: spacing.md, gap: spacing.sm },
     noPaymentRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs },
     noPaymentText: { fontFamily, fontSize: 16, fontWeight: '500', color: colors.secondaryText },
@@ -71,23 +74,38 @@ function createStyles(colors) {
   };
 }
 
-export default function SubscriptionScreen({ navigation }) {
+export default function SubscriptionScreen({ navigation, route }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => StyleSheet.create(createStyles(colors)), [colors]);
-  const { products, isPro } = useSubscription();
+  const { products, isPro, offers } = useSubscription();
+
+  const fromOffer = route.params?.fromOffer === true && route.params?.offerId;
+  const activeOffer = useMemo(() => {
+    if (!fromOffer || !offers?.length) return null;
+    const id = route.params?.offerId;
+    const found = offers.find((o) => String(o.id) === String(id));
+    return found ?? offers[0];
+  }, [fromOffer, offers, route.params?.offerId]);
 
   const plans = useMemo(() => {
     const list = products?.length ? products.filter((p) => p.interval === 'monthly' || p.interval === 'yearly') : FALLBACK_PLANS;
-    return list.map((p) => ({
-      interval: p.interval,
-      price: formatPrice(p.price_cents, p.currency),
-      price_cents: p.price_cents,
-      currency: p.currency,
-      trial_days: p.trial_days ?? 0,
-      pricePerMonth: p.interval === 'yearly' ? `${formatPrice(Math.round(p.price_cents / 12), p.currency)}${t('subscription.perMonth')}` : null,
-    }));
-  }, [products, t]);
+    return list.map((p) => {
+      const baseCents = p.price_cents ?? 0;
+      const discountedCents = activeOffer ? applyOfferDiscount(baseCents, activeOffer) : baseCents;
+      const showOriginalPrice = !!activeOffer;
+      return {
+        interval: p.interval,
+        price: formatPrice(discountedCents, p.currency),
+        priceOriginal: showOriginalPrice ? formatPrice(baseCents, p.currency) : null,
+        price_cents: discountedCents,
+        currency: p.currency,
+        trial_days: p.trial_days ?? 0,
+        pricePerMonth: p.interval === 'yearly' ? `${formatPrice(Math.round(discountedCents / 12), p.currency)}${t('subscription.perMonth')}` : null,
+      };
+    });
+  }, [products, t, activeOffer]);
+
 
   const [selectedIndex, setSelectedIndex] = useState(0);
   const selectedPlan = plans[selectedIndex];
@@ -135,6 +153,11 @@ export default function SubscriptionScreen({ navigation }) {
           ))}
         </View>
 
+        {activeOffer && (
+          <Text style={styles.offerDiscountText}>
+            {t('subscription.youGotDiscount', { discount: activeOffer.subtitle || '50%' })}
+          </Text>
+        )}
         <View style={styles.plans}>
           {plans.map((plan, index) => {
             const isSelected = selectedIndex === index;
@@ -155,7 +178,12 @@ export default function SubscriptionScreen({ navigation }) {
                   {trialText && <Text style={styles.planSubtitle}>{trialText}</Text>}
                 </View>
                 <View style={styles.planPricing}>
-                  <Text style={styles.planPrice}>{plan.price}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4 }}>
+                    <Text style={styles.planPrice}>{plan.price}</Text>
+                    {plan.priceOriginal != null && (
+                      <Text style={styles.planPriceOld}> / {plan.priceOriginal}</Text>
+                    )}
+                  </View>
                   {plan.pricePerMonth && (
                     <Text style={styles.planPricePerMonth}>{plan.pricePerMonth}</Text>
                   )}

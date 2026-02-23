@@ -3,7 +3,7 @@
  * Shows Start Chat when no active chat, shows chat UI when chat is active
  */
 
-import React, { useLayoutEffect, useEffect, useRef, useMemo } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useFocusEffect } from '@react-navigation/native';
 import {
@@ -43,9 +43,32 @@ export default function AILawyerScreen({ navigation }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
+  const paddingBottom = Math.max(0, Number(tabBarHeight) || 0);
   const { setInChat, lastVisitedTabRef } = useAILawyerTab();
   const startStyles = useMemo(() => StyleSheet.create(createStartStyles(colors)), [colors]);
-  const chatStyles = useMemo(() => StyleSheet.create({ container: { flex: 1, backgroundColor: colors.secondaryBackground } }), [colors]);
+  const chatStyles = useMemo(
+    () =>
+      StyleSheet.create({
+        container: { flex: 1, backgroundColor: colors.secondaryBackground },
+        headerBar: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingHorizontal: 8,
+          paddingBottom: 12,
+          backgroundColor: colors.secondaryBackground,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: colors.tertiary,
+        },
+        headerTitle: {
+          fontFamily,
+          fontSize: 20,
+          fontWeight: Platform.OS === 'android' ? '800' : '600',
+          color: colors.primaryText,
+        },
+      }),
+    [colors]
+  );
   const chatMenuActions = useMemo(
     () => [
       {
@@ -87,7 +110,7 @@ export default function AILawyerScreen({ navigation }) {
       Animated.timing(chatFadeAnim, {
         toValue: 1,
         duration: 280,
-        useNativeDriver: true,
+        useNativeDriver: false,
       }).start();
     }
   }, [hasChat, currentChatId]);
@@ -144,69 +167,32 @@ export default function AILawyerScreen({ navigation }) {
     }
   };
 
-  const parentNavigation = navigation.getParent();
-
-  const applyHeaderOptions = React.useCallback(() => {
-    if (!parentNavigation) return;
-    parentNavigation.setOptions({
-      headerShown: true,
-      title: 'AI Lawyer',
-      headerShadowVisible: false,
-      headerStyle: { backgroundColor: colors.secondaryBackground },
-      headerTitleStyle: { fontSize: 20, fontWeight: '600', marginTop: 4, color: colors.primaryText },
-      headerTintColor: colors.primaryText,
-      headerBackVisible: false,
-      headerLeft: () => (
-        <IconButton icon={ChevronLeft} onPress={goBack} size={36} iconSize={22} />
-      ),
-      headerRight: () => (
-        <MenuView onPressAction={handleMenuAction} actions={chatMenuActions}>
-          <IconButton icon={EllipsisVertical} size={36} iconSize={20} />
-        </MenuView>
-      ),
-    });
-  }, [parentNavigation, goBack, chatMenuActions, colors]);
-
-  const hideHeader = React.useCallback(() => {
-    if (!parentNavigation) return;
-    parentNavigation.setOptions({
-      headerShown: false,
-      headerLeft: undefined,
-      headerRight: undefined,
-    });
-  }, [parentNavigation]);
-
-  useLayoutEffect(() => {
-    if (hasChat || currentChatId) {
-      applyHeaderOptions();
-    } else {
-      hideHeader();
-    }
-  }, [hasChat, currentChatId, applyHeaderOptions, hideHeader]);
-
-  useFocusEffect(
-    React.useCallback(() => {
-      if (hasChat || currentChatId) applyHeaderOptions();
-      return hideHeader;
-    }, [hasChat, currentChatId, applyHeaderOptions, hideHeader])
-  );
+  // Не показываем App Bar на родительском стеке — только своя шапка внутри экрана чата,
+  // чтобы на главных табах (Home, History, Settings) не было заголовка с кнопкой назад.
 
   if (hasChat || currentChatId) {
     return (
       <Animated.View
         style={[
           chatStyles.container,
-          { paddingBottom: tabBarHeight },
+          { paddingBottom },
           { opacity: chatFadeAnim },
         ]}
       >
+        <View style={[chatStyles.headerBar, { paddingTop: insets.top }]}>
+          <IconButton icon={ChevronLeft} onPress={goBack} size={36} iconSize={22} />
+          <Text style={chatStyles.headerTitle}>{t('tabs.aiLawyer')}</Text>
+          <MenuView onPressAction={handleMenuAction} actions={chatMenuActions}>
+            <IconButton icon={EllipsisVertical} size={36} iconSize={20} />
+          </MenuView>
+        </View>
         <ChatView chatPrompt={chatPrompt} chatContext={chatContext} />
       </Animated.View>
     );
   }
 
   return (
-    <SafeAreaView style={[startStyles.container, { paddingBottom: tabBarHeight }]} edges={['top']}>
+    <SafeAreaView style={[startStyles.container, { paddingBottom }]} edges={['top']}>
       <ScrollView
         style={startStyles.scroll}
         contentContainerStyle={startStyles.scrollContent}

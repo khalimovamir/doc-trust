@@ -3,7 +3,7 @@
  * Displays comparison result from Edge Function: summary, filters, diff cards.
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 import { ChevronLeft, FileText, ArrowRight } from 'lucide-react-native';
 import { fontFamily, spacing, useTheme } from '../theme';
 import IconButton from '../components/IconButton';
+import { maybeRequestReview } from '../lib/requestReview';
 
 function getTypeConfig(colors) {
   return {
@@ -79,6 +80,12 @@ export default function ComparingResultScreen({ navigation, route }) {
   const document2Name = route.params?.document2Name || '';
 
   const [activeFilter, setActiveFilter] = useState('all');
+
+  useEffect(() => {
+    if (!result) return;
+    const t = setTimeout(() => maybeRequestReview(), 1500);
+    return () => clearTimeout(t);
+  }, [result]);
 
   const differences = useMemo(() => {
     if (!result?.differences || !Array.isArray(result.differences)) return [];

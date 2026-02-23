@@ -1,13 +1,16 @@
 {
   "expo": {
-    "name": "AI Lawyer",
+    "name": "Doc Trust",
     "slug": "ai-lawyer",
-    "scheme": "ai-lawyer",
+    "scheme": [
+      "ai-lawyer",
+      "doctrust"
+    ],
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -15,7 +18,11 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.ai-lawyer"
+      "bundleIdentifier": "com.anonymous.ai-lawyer",
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -23,15 +30,32 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.anonymous.ailawyer"
+      "package": "com.anonymous.ailawyer",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "expo-apple-authentication",
       "expo-web-browser",
       "expo-image-picker",
-      "expo-localization","expo-media-library"
-    ]
+      "expo-localization",
+      "expo-media-library"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "9461d789-f6fc-4566-9c0d-a42ee59f1339"
+      }
+    },
+    "owner": "webnum.com"
   }
 }

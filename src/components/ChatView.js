@@ -180,12 +180,15 @@ function FullscreenImageViewer({ uri, onClose, styles }) {
         if (touches.length === 2 && initialDist.current > 0) {
           const d = distance(touches[0], touches[1]);
           const newScale = (baseScale.current * d) / initialDist.current;
-          scale.setValue(Math.max(0.5, Math.min(4, newScale)));
+          const s = Number(newScale);
+          scale.setValue(Math.max(0.5, Math.min(4, Number.isNaN(s) ? 1 : s)));
         } else if (touches.length === 1) {
-          const dx = touches[0].pageX - startX.current;
-          const dy = touches[0].pageY - startY.current;
-          translateX.setValue(baseTranslateX.current + dx);
-          translateY.setValue(baseTranslateY.current + dy);
+          const dx = Number(touches[0].pageX) - Number(startX.current);
+          const dy = Number(touches[0].pageY) - Number(startY.current);
+          const tx = Number(baseTranslateX.current) + (Number.isNaN(dx) ? 0 : dx);
+          const ty = Number(baseTranslateY.current) + (Number.isNaN(dy) ? 0 : dy);
+          translateX.setValue(tx);
+          translateY.setValue(ty);
           startX.current = touches[0].pageX;
           startY.current = touches[0].pageY;
         }
@@ -226,13 +229,16 @@ function FullscreenImageViewer({ uri, onClose, styles }) {
         onPress={onClose}
         activeOpacity={0.8}
       >
-        <View style={[styles.fullscreenCloseInner, !isLiquidGlassSupported && styles.fullscreenCloseFallback]}>
-          <LiquidGlassView
-            style={[styles.fullscreenCloseGlass, !isLiquidGlassSupported && styles.fullscreenCloseFallback]}
-            effect="clear"
-          >
-            <X size={24} color="#ffffff" strokeWidth={2.5} />
-          </LiquidGlassView>
+        <View style={[styles.fullscreenCloseInner, (Platform.OS !== 'ios' || !isLiquidGlassSupported) && styles.fullscreenCloseFallback]}>
+          {Platform.OS === 'ios' && isLiquidGlassSupported ? (
+            <LiquidGlassView style={[styles.fullscreenCloseGlass]} effect="clear">
+              <X size={24} color="#ffffff" strokeWidth={2.5} />
+            </LiquidGlassView>
+          ) : (
+            <View style={[styles.fullscreenCloseGlass, styles.fullscreenCloseFallback]}>
+              <X size={24} color="#ffffff" strokeWidth={2.5} />
+            </View>
+          )}
         </View>
       </TouchableOpacity>
     </Modal>
@@ -256,18 +262,24 @@ export default function ChatView({ chatPrompt, chatContext }) {
   const [pendingImage, setPendingImage] = useState(null); // { uri, base64 } for preview and upload
   const [fullscreenImageUri, setFullscreenImageUri] = useState(null);
   const scrollRef = useRef(null);
-  const sheetTranslateY = useRef(new Animated.Value(Dimensions.get('window').height)).current;
+  const sheetTranslateY = useRef(new Animated.Value(800)).current;
 
   const hasAutoSent = useRef(false);
   const sendRef = useRef(null);
 
   const pendingContextText = chatContext?.contextText ?? null;
-  const screenHeight = Dimensions.get('window').height;
+  const getScreenHeight = () => {
+    try {
+      const h = Dimensions.get('window').height;
+      const n = Number(h);
+      return Number.isFinite(n) && n > 0 ? n : 800;
+    } catch { return 800; }
+  };
   const closeContextSheet = () => {
     Animated.timing(sheetTranslateY, {
-      toValue: screenHeight,
+      toValue: getScreenHeight(),
       duration: 220,
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start(({ finished }) => {
       if (finished) setContextSheetVisible(false);
     });
@@ -280,7 +292,8 @@ export default function ChatView({ chatPrompt, chatContext }) {
       onMoveShouldSetPanResponderCapture: () => true,
       onPanResponderGrant: () => {},
       onPanResponderMove: (_, g) => {
-        sheetTranslateY.setValue(Math.max(0, g.dy));
+        const dy = Number(g.dy);
+        sheetTranslateY.setValue(Math.max(0, Number.isNaN(dy) ? 0 : dy));
       },
       onPanResponderRelease: (_, g) => {
         const closeThreshold = 80;
@@ -290,7 +303,7 @@ export default function ChatView({ chatPrompt, chatContext }) {
         } else {
           Animated.spring(sheetTranslateY, {
             toValue: 0,
-            useNativeDriver: true,
+            useNativeDriver: false,
             tension: 65,
             friction: 11,
           }).start();
@@ -300,11 +313,12 @@ export default function ChatView({ chatPrompt, chatContext }) {
   ).current;
   useEffect(() => {
     if (contextSheetVisible) {
-      sheetTranslateY.setValue(screenHeight);
+      const h = getScreenHeight();
+      sheetTranslateY.setValue(h);
       Animated.timing(sheetTranslateY, {
         toValue: 0,
         duration: 250,
-        useNativeDriver: true,
+        useNativeDriver: false,
       }).start();
     }
   }, [contextSheetVisible]);

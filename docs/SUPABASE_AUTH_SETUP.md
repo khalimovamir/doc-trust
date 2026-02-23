@@ -67,5 +67,20 @@ using (
 
 2. Bucket **avatars** должен быть **public** (Settings → Public bucket), чтобы `getPublicUrl` работал.
 
-## 5. Apple Sign In
-- Пока не настраивается (по вашему запросу в Supabase ещё не подключён).
+## 5. Apple Sign In (iOS)
+
+Приложение использует **нативный** Sign in with Apple: iOS выдаёт `identityToken`, он отправляется в Supabase через `signInWithIdToken({ provider: 'apple', token })`.
+
+### В Supabase Dashboard
+
+1. **Authentication → Providers** — включите **Apple**.
+2. В настройках Apple укажите:
+   - **Client ID (Services ID)** — для нативного iOS укажите **Bundle ID приложения**: `com.anonymous.ai-lawyer` (как в `app.json` → `ios.bundleIdentifier`).
+   - **Secret** — для нативного входа через id_token не обязателен; если Supabase требует, создайте Key в [Apple Developer](https://developer.apple.com/account/resources/authkeys/list) (Sign in with Apple) и укажите **Key ID**, **Team ID**, **Service ID**, **Private Key (.p8)**.
+
+Подробнее: [Supabase — Login with Apple](https://supabase.com/docs/guides/auth/social-login/auth-apple).
+
+### В проекте
+
+- В **Xcode** (или после `expo prebuild`) для таргета iOS должна быть включена capability **Sign in with Apple** (добавляется плагином `expo-apple-authentication` и `ios.usesAppleSignIn: true` в `app.json`).
+- Кнопка «Continue with Apple» показывается **только на iOS**; на Android её нет.

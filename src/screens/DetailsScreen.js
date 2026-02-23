@@ -10,11 +10,11 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Animated,
-  PanResponder,
   Image,
   Alert,
   Platform,
+  Animated,
+  PanResponder,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import {
@@ -32,7 +32,6 @@ import { IconCircleCheckFilled } from '@tabler/icons-react-native';
 import { MenuView } from '@react-native-menu/menu';
 import Svg, { Circle as SvgCircle } from 'react-native-svg';
 
-const AnimatedSvgCircle = Animated.createAnimatedComponent(SvgCircle);
 import { fontFamily, spacing, useTheme } from '../theme';
 import IconButton from '../components/IconButton';
 import { SkeletonDetails } from '../components/Skeleton';
@@ -40,7 +39,7 @@ import { useAILawyerChat } from '../context/AILawyerChatContext';
 import { useAnalysis } from '../context/AnalysisContext';
 import { useProfile } from '../context/ProfileContext';
 import { useTranslation } from 'react-i18next';
-import { getAnalysisById, updateGuidanceItemDone } from '../lib/documents';
+import { getAnalysisByIdCached, updateGuidanceItemDone } from '../lib/documents';
 import { formatDateShort, formatDateLocalized } from '../lib/dateFormat';
 import { exportAnalysisToPdf } from '../lib/exportPdf';
 
@@ -62,11 +61,9 @@ function DraggableSegmentedControl({ activeIndex, onIndexChange, labels, styles 
   const count = labels.length;
   const [segmentWidth, setSegmentWidth] = useState(0);
   const tabWidth = segmentWidth > 0 ? (segmentWidth - SEGMENT_PADDING * 2) / count : 0;
-
   const indicatorX = useRef(new Animated.Value(0)).current;
   const startX = useRef(0);
   const currentX = useRef(0);
-
   const onIndexChangeRef = useRef(onIndexChange);
   onIndexChangeRef.current = onIndexChange;
   const tabWidthRef = useRef(tabWidth);
@@ -82,8 +79,9 @@ function DraggableSegmentedControl({ activeIndex, onIndexChange, labels, styles 
     if (w > 0 && w !== segmentWidth) {
       setSegmentWidth(w);
       const tw = (w - SEGMENT_PADDING * 2) / count;
-      indicatorX.setValue(activeIndex * tw);
-      currentX.current = activeIndex * tw;
+      const val = activeIndex * tw;
+      indicatorX.setValue(val);
+      currentX.current = val;
     }
   };
 
@@ -93,11 +91,9 @@ function DraggableSegmentedControl({ activeIndex, onIndexChange, labels, styles 
     Animated.timing(indicatorX, {
       toValue: index * tw,
       duration: 200,
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start();
-    if (typeof onIndexChangeRef.current === 'function') {
-      onIndexChangeRef.current(index);
-    }
+    if (typeof onIndexChangeRef.current === 'function') onIndexChangeRef.current(index);
   };
 
   useEffect(() => {
@@ -106,7 +102,7 @@ function DraggableSegmentedControl({ activeIndex, onIndexChange, labels, styles 
     Animated.timing(indicatorX, {
       toValue: activeIndex * tw,
       duration: 200,
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start();
   }, [activeIndex]);
 
@@ -114,9 +110,7 @@ function DraggableSegmentedControl({ activeIndex, onIndexChange, labels, styles 
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponderCapture: (_, g) => Math.abs(g.dx) > 5,
-      onPanResponderGrant: () => {
-        startX.current = currentX.current;
-      },
+      onPanResponderGrant: () => { startX.current = currentX.current; },
       onPanResponderMove: (_, g) => {
         const tw = tabWidthRef.current;
         if (tw <= 0) return;
@@ -132,38 +126,18 @@ function DraggableSegmentedControl({ activeIndex, onIndexChange, labels, styles 
         Animated.timing(indicatorX, {
           toValue: clamped * tw,
           duration: 150,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }).start();
-        if (typeof onIndexChangeRef.current === 'function') {
-          onIndexChangeRef.current(clamped);
-        }
-      },
-      onPanResponderTerminate: () => {
-        const tw = tabWidthRef.current;
-        if (tw <= 0) return;
-        const nearest = Math.round(currentX.current / tw);
-        const clamped = Math.max(0, Math.min(count - 1, nearest));
-        Animated.timing(indicatorX, {
-          toValue: clamped * tw,
-          duration: 150,
-          useNativeDriver: true,
-        }).start();
+        if (typeof onIndexChangeRef.current === 'function') onIndexChangeRef.current(clamped);
       },
     })
   ).current;
 
   return (
-    <View
-      style={styles.segmentedControl}
-      onLayout={onSegmentLayout}
-      {...panResponder.panHandlers}
-    >
+    <View style={styles.segmentedControl} onLayout={onSegmentLayout} {...panResponder.panHandlers}>
       {tabWidth > 0 && (
         <Animated.View
-          style={[
-            styles.segmentPill,
-            { width: tabWidth, transform: [{ translateX: indicatorX }] },
-          ]}
+          style={[styles.segmentPill, { width: tabWidth, transform: [{ translateX: indicatorX }] }]}
         />
       )}
       {labels.map((label, index) => (
@@ -369,54 +343,24 @@ function getSeverityConfig(colors) {
 const RING_SIZE_DEFAULT = 80;
 const RING_STROKE_DEFAULT = 6;
 
-const SCORE_RING_ANIM_DURATION = 700;
-
 function ScoreRing({ score, size = RING_SIZE_DEFAULT, styles, colors }) {
-  const stroke = Math.max(3, Math.round((RING_STROKE_DEFAULT * size) / RING_SIZE_DEFAULT));
-  const R = (size - stroke) / 2;
-  const CX = size / 2;
-  const CY = size / 2;
-  const circumference = 2 * Math.PI * R;
+  const numScore = Number(score);
+  const safeScore = Number.isNaN(numScore) ? 0 : Math.min(100, Math.max(0, numScore));
+  const sizeNum = Number(size);
+  const safeSize = Number.isNaN(sizeNum) || sizeNum <= 0 ? RING_SIZE_DEFAULT : sizeNum;
+  const stroke = Math.max(3, Math.round((RING_STROKE_DEFAULT * safeSize) / RING_SIZE_DEFAULT));
+  const R = Math.max(0, (safeSize - stroke) / 2);
+  const CX = safeSize / 2;
+  const CY = safeSize / 2;
+  const circumference = Math.max(0, 2 * Math.PI * R);
   const scoreColor =
-    score >= 70 ? colors.success : score >= 50 ? colors.warning : colors.error;
-  const pct = Math.min(100, Math.max(0, Number(score) || 0)) / 100;
-  const dashOffset = circumference * (1 - pct);
-  const textSize = size <= 56 ? 14 : 20;
-
-  const dashOffsetAnim = useRef(new Animated.Value(circumference)).current;
-  const scoreAnim = useRef(new Animated.Value(0)).current;
-  const [displayScore, setDisplayScore] = useState(0);
-
-  useEffect(() => {
-    dashOffsetAnim.setValue(circumference);
-    scoreAnim.setValue(0);
-    setDisplayScore(0);
-    const listener = scoreAnim.addListener(({ value }) => {
-      setDisplayScore(Math.round(value));
-    });
-    Animated.parallel([
-      Animated.timing(dashOffsetAnim, {
-        toValue: dashOffset,
-        duration: SCORE_RING_ANIM_DURATION,
-        useNativeDriver: false,
-      }),
-      Animated.timing(scoreAnim, {
-        toValue: score,
-        duration: SCORE_RING_ANIM_DURATION,
-        useNativeDriver: true,
-      }),
-    ]).start(({ finished }) => {
-      if (finished) {
-        scoreAnim.removeListener(listener);
-        setDisplayScore(score);
-      }
-    });
-    return () => scoreAnim.removeListener(listener);
-  }, [score, dashOffset, circumference]);
+    safeScore >= 70 ? colors.success : safeScore >= 50 ? colors.warning : colors.error;
+  const dashOffset = Math.max(0, Math.min(circumference, circumference * (1 - safeScore / 100)));
+  const textSize = safeSize <= 56 ? 14 : 20;
 
   return (
-    <View style={[styles.scoreRing, { width: size, height: size }]}>
-      <Svg width={size} height={size} style={styles.scoreRingSvg}>
+    <View style={[styles.scoreRing, { width: safeSize, height: safeSize }]}>
+      <Svg width={safeSize} height={safeSize} style={styles.scoreRingSvg}>
         <SvgCircle
           cx={CX}
           cy={CY}
@@ -425,7 +369,7 @@ function ScoreRing({ score, size = RING_SIZE_DEFAULT, styles, colors }) {
           strokeWidth={stroke}
           fill="none"
         />
-        <AnimatedSvgCircle
+        <SvgCircle
           cx={CX}
           cy={CY}
           r={R}
@@ -433,13 +377,13 @@ function ScoreRing({ score, size = RING_SIZE_DEFAULT, styles, colors }) {
           strokeWidth={stroke}
           fill="none"
           strokeDasharray={`${circumference} ${circumference}`}
-          strokeDashoffset={dashOffsetAnim}
+          strokeDashoffset={dashOffset}
           strokeLinecap="round"
           transform={`rotate(-90, ${CX}, ${CY})`}
         />
       </Svg>
       <View style={styles.scoreRingTextWrap}>
-        <Text style={[styles.scoreText, { fontSize: textSize }]}>{displayScore}</Text>
+        <Text style={[styles.scoreText, { fontSize: textSize }]}>{Math.round(safeScore)}</Text>
       </View>
     </View>
   );
@@ -684,7 +628,7 @@ export default function DetailsScreen({ navigation, route }) {
     setAnalysis(null);
     setLoading(true);
     let cancelled = false;
-    getAnalysisById(analysisId)
+    getAnalysisByIdCached(analysisId)
       .then((a) => {
         if (!cancelled) setAnalysis(a);
       })
@@ -700,7 +644,8 @@ export default function DetailsScreen({ navigation, route }) {
   const rawRedFlags = analysis?.redFlags || RED_FLAGS_ITEMS;
   const redFlags = getNormalizedRedFlags(rawRedFlags);
   const guidance = analysis?.guidance || GUIDANCE_ITEMS;
-  const score = typeof analysis?.score === 'number' ? analysis.score : 35;
+  const rawScore = analysis?.score;
+  const score = typeof rawScore === 'number' && !Number.isNaN(rawScore) ? rawScore : 35;
   const title = analysis?.title || analysis?.documentType || 'Product Deal Issue';
   const criticalCount = redFlags.filter((r) => r.type === 'critical').length;
   const warningCount = redFlags.filter((r) => r.type === 'warning').length;
@@ -825,7 +770,7 @@ export default function DetailsScreen({ navigation, route }) {
     navigation.setOptions({
       headerBackVisible: false,
       headerStyle: { backgroundColor: colors.primaryBackground },
-      headerTitleStyle: { fontSize: 20, fontWeight: '600', marginTop: 4, color: colors.primaryText },
+      headerTitleStyle: { fontSize: 20, fontWeight: Platform.OS === 'android' ? '800' : '600', marginTop: 4, color: colors.primaryText },
       headerTintColor: colors.primaryText,
       headerLeft: () => (
         <IconButton

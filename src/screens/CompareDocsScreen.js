@@ -114,7 +114,7 @@ export default function CompareDocsScreen({ navigation, route }) {
     Animated.timing(swapRotation, {
       toValue: 1,
       duration: 400,
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start();
   };
 

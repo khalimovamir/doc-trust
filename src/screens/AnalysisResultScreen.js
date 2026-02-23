@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
   Image,
   Alert,
+  Platform,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { ChevronLeft, EllipsisVertical } from 'lucide-react-native';
@@ -29,6 +30,7 @@ import { analyzeDocument } from '../lib/ai';
 import { getAppLanguageCode } from '../i18n';
 import { saveDocumentWithAnalysis } from '../lib/documents';
 import { exportAnalysisToPdf } from '../lib/exportPdf';
+import { maybeRequestReview } from '../lib/requestReview';
 import { useTranslation } from 'react-i18next';
 import {
   ScoreRing,
@@ -72,10 +74,19 @@ export default function AnalysisResultScreen({ navigation, route }) {
   const lastJurisdictionRef = useRef(profile?.jurisdiction_code);
   const fromJurisdictionRef = useRef(false);
 
+  useFocusEffect(
+    useCallback(() => {
+      if (analysis?.score == null) return;
+      const t = setTimeout(() => maybeRequestReview(), 1500);
+      return () => clearTimeout(t);
+    }, [analysis?.score])
+  );
+
   const rawRedFlags = analysis?.redFlags || RED_FLAGS_ITEMS;
   const redFlags = getNormalizedRedFlags(rawRedFlags);
   const guidance = analysis?.guidance || GUIDANCE_ITEMS;
-  const score = typeof analysis?.score === 'number' ? analysis.score : 35;
+  const rawScore = analysis?.score;
+  const score = typeof rawScore === 'number' && !Number.isNaN(rawScore) ? rawScore : 35;
   const title = analysis?.documentType || 'Document';
   const criticalCount = redFlags.filter((r) => r.type === 'critical').length;
   const warningCount = redFlags.filter((r) => r.type === 'warning').length;
@@ -183,7 +194,7 @@ export default function AnalysisResultScreen({ navigation, route }) {
     navigation.setOptions({
       headerBackVisible: false,
       headerStyle: { backgroundColor: colors.primaryBackground },
-      headerTitleStyle: { fontSize: 20, fontWeight: '600', marginTop: 4, color: colors.primaryText },
+      headerTitleStyle: { fontSize: 20, fontWeight: Platform.OS === 'android' ? '800' : '600', marginTop: 4, color: colors.primaryText },
       headerTintColor: colors.primaryText,
       headerLeft: () => (
         <IconButton

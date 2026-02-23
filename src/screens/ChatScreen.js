@@ -58,7 +58,7 @@ export default function ChatScreen({ navigation }) {
       title: t('screens.aiLawyer'),
       headerShadowVisible: false,
       headerStyle: { backgroundColor: colors.secondaryBackground },
-      headerTitleStyle: { fontSize: 20, fontWeight: '600', marginTop: 4, color: colors.primaryText },
+      headerTitleStyle: { fontSize: 20, fontWeight: Platform.OS === 'android' ? '800' : '600', marginTop: 4, color: colors.primaryText },
       headerTintColor: colors.primaryText,
       headerLeft: () => (
         <IconButton

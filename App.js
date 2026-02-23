@@ -9,6 +9,12 @@ import { SubscriptionProvider } from './src/context/SubscriptionContext';
 import { AnalysisProvider } from './src/context/AnalysisContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import { ensureI18n } from './src/i18n';
+import ErrorBoundary from './src/components/ErrorBoundary';
+import { initSentry, wrapRootComponent } from './src/lib/sentry';
+
+initSentry();
+
+const navigationRefHolder = { current: null };
 
 function StatusBarThemed() {
   const { colors, isDarkMode } = useTheme();
@@ -20,7 +26,7 @@ function StatusBarThemed() {
   );
 }
 
-export default function App() {
+function App() {
   const [i18nReady, setI18nReady] = useState(false);
 
   useEffect(() => {
@@ -37,19 +43,23 @@ export default function App() {
   if (!i18nReady) return null;
 
   return (
-    <SafeAreaProvider>
-      <ThemeProvider>
-        <StatusBarThemed />
-        <AuthProvider>
-          <ProfileProvider>
-            <SubscriptionProvider>
-              <AnalysisProvider>
-                <AppNavigator />
-              </AnalysisProvider>
-            </SubscriptionProvider>
-          </ProfileProvider>
-        </AuthProvider>
-      </ThemeProvider>
-    </SafeAreaProvider>
+    <ErrorBoundary navigationRef={navigationRefHolder}>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <StatusBarThemed />
+          <AuthProvider>
+            <ProfileProvider>
+              <SubscriptionProvider>
+                <AnalysisProvider>
+                  <AppNavigator onNavigationRefReady={(ref) => { navigationRefHolder.current = ref; }} />
+                </AnalysisProvider>
+              </SubscriptionProvider>
+            </ProfileProvider>
+          </AuthProvider>
+        </ThemeProvider>
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
 }
+
+export default wrapRootComponent(App);

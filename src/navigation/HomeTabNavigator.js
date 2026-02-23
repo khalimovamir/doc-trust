@@ -25,9 +25,9 @@ function HomeTabNavigatorInner() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.secondaryText,
-        tabBarStyle: { backgroundColor: colors.secondaryBackground },
+        tabBarActiveTintColor: colors?.primary ?? '#3b82f6',
+        tabBarInactiveTintColor: colors?.secondaryText ?? '#6b7280',
+        tabBarStyle: { backgroundColor: colors?.secondaryBackground ?? '#ffffff' },
       }}
     >
       <Tab.Screen

@@ -6,9 +6,9 @@
  * Which one renders depends on Supabase session from AuthContext.
  */
 
-import React, { useMemo } from 'react';
-import { View, StyleSheet, ActivityIndicator } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import React, { useMemo, useEffect, useRef } from 'react';
+import { View, StyleSheet, ActivityIndicator, Linking, Platform } from 'react-native';
+import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
@@ -40,6 +40,7 @@ import AnalyzingScreen from '../screens/AnalyzingScreen';
 import ComparingScreen from '../screens/ComparingScreen';
 import ComparingResultScreen from '../screens/ComparingResultScreen';
 import ChatScreen from '../screens/ChatScreen';
+import { parseOfferDeepLink } from '../lib/deepLinks';
 
 const AuthStack = createNativeStackNavigator();
 const AppStack = createNativeStackNavigator();
@@ -51,7 +52,8 @@ function AuthNavigator() {
     headerShadowVisible: false,
     headerStyle: { backgroundColor: colors.primaryBackground },
     headerTintColor: colors.primaryText,
-    headerTitleStyle: { fontSize: 20, fontWeight: '600', marginTop: 4, color: colors.primaryText },
+    headerTitleStyle: { fontSize: 20, fontWeight: Platform.OS === 'android' ? '800' : '600', marginTop: 4, color: colors.primaryText },
+    headerTitleAlign: 'center',
   }), [colors]);
   const authHeaderOptions = useMemo(() => ({
     ...headerWithBackOptions,
@@ -98,7 +100,8 @@ function AppNavigatorInner() {
     headerShadowVisible: false,
     headerStyle: { backgroundColor: colors.primaryBackground },
     headerTintColor: colors.primaryText,
-    headerTitleStyle: { fontSize: 20, fontWeight: '600', marginTop: 4, color: colors.primaryText },
+    headerTitleStyle: { fontSize: 20, fontWeight: Platform.OS === 'android' ? '800' : '600', marginTop: 4, color: colors.primaryText },
+    headerTitleAlign: 'center',
   }), [colors]);
   return (
     <AILawyerChatProvider>
@@ -172,9 +175,31 @@ function AppNavigatorInner() {
   );
 }
 
-export default function AppNavigator() {
+export default function AppNavigator({ onNavigationRefReady }) {
   const { session, user, isLoading, pendingPasswordReset } = useAuth();
   const { colors } = useTheme();
+  const navigationRef = useNavigationContainerRef();
+  const isAuthenticated = !!(session?.access_token && user?.id);
+  const showAuthStack = !isAuthenticated || pendingPasswordReset;
+
+  React.useEffect(() => {
+    onNavigationRefReady?.(navigationRef);
+  }, [onNavigationRefReady]);
+
+  useEffect(() => {
+    const handleUrl = (url) => {
+      const offerId = parseOfferDeepLink(url);
+      if (offerId == null || showAuthStack) return;
+      setTimeout(() => {
+        navigationRef.current?.navigate('Subscription', { fromOffer: true, offerId: String(offerId) });
+      }, 100);
+    };
+    Linking.getInitialURL().then((url) => {
+      if (url) handleUrl(url);
+    });
+    const sub = Linking.addEventListener('url', ({ url }) => handleUrl(url));
+    return () => sub.remove();
+  }, [showAuthStack]);
 
   if (isLoading) {
     return (
@@ -184,11 +209,8 @@ export default function AppNavigator() {
     );
   }
 
-  const isAuthenticated = !!(session?.access_token && user?.id);
-  const showAuthStack = !isAuthenticated || pendingPasswordReset;
-
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       {showAuthStack ? <AuthNavigator /> : <AppNavigatorInner />}
     </NavigationContainer>
   );
