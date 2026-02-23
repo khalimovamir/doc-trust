@@ -23,7 +23,6 @@
     "start:dev": "env -u CI expo start --clear"
   },
   "dependencies": {
-    "@callstack/liquid-glass": "^0.7.0",
     "@expo/metro-config": "~54.0.14",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-menu/menu": "^2.0.0",

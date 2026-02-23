@@ -10,8 +10,14 @@ import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+function normalizeEnv(value) {
+  if (value == null) return '';
+  const s = String(value).trim();
+  return s === 'undefined' || s === 'null' ? '' : s;
+}
+
+const supabaseUrl = normalizeEnv(process.env.EXPO_PUBLIC_SUPABASE_URL);
+const supabaseAnonKey = normalizeEnv(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
 
 const noopUnsub = { unsubscribe: () => {} };
 const noopPromise = Promise.resolve({ data: { session: null }, error: null });
@@ -50,24 +56,31 @@ const stubSupabase = {
 
 let client;
 
-if (supabaseUrl && supabaseAnonKey) {
-  client = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      storage: AsyncStorage,
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: false,
-    },
-  });
-  AppState.addEventListener('change', (state) => {
-    if (state === 'active') {
-      client.auth.startAutoRefresh();
-    } else {
-      client.auth.stopAutoRefresh();
+if (supabaseUrl.length > 0 && supabaseAnonKey.length > 0) {
+  try {
+    client = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        storage: AsyncStorage,
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: false,
+      },
+    });
+    AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        client.auth.startAutoRefresh();
+      } else {
+        client.auth.stopAutoRefresh();
+      }
+    });
+  } catch (e) {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.warn('Supabase createClient failed:', e?.message);
     }
-  });
+    client = stubSupabase;
+  }
 } else {
-  if (__DEV__) {
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
     console.warn(
       'Supabase credentials missing. Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY to .env or EAS env vars.'
     );

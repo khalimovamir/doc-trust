@@ -19,7 +19,7 @@ import {
   PanResponder,
   Platform,
 } from 'react-native';
-import { LiquidGlassView, isLiquidGlassSupported } from '@callstack/liquid-glass';
+import { LiquidGlassView, isLiquidGlassSupported } from '../lib/liquidGlass';
 import { ThumbsUp, ThumbsDown, Paperclip, SendHorizontal, X, FileText, Scale, Shield } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme, fontFamily, spacing } from '../theme';

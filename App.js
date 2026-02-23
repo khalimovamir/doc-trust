@@ -12,12 +12,20 @@ import { ensureI18n } from './src/i18n';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import { initSentry, wrapRootComponent } from './src/lib/sentry';
 
-initSentry();
+try {
+  initSentry();
+} catch (_) {}
 
-const hasSupabaseConfig = !!(
-  process.env.EXPO_PUBLIC_SUPABASE_URL &&
-  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
-);
+function getSupabaseUrl() {
+  const v = process.env.EXPO_PUBLIC_SUPABASE_URL;
+  return typeof v === 'string' ? v.trim() : '';
+}
+function getSupabaseKey() {
+  const v = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+  return typeof v === 'string' ? v.trim() : '';
+}
+
+const hasSupabaseConfig = !!(getSupabaseUrl() && getSupabaseKey());
 
 function ConfigMissingScreen() {
   return (
@@ -69,7 +77,9 @@ function App() {
   const [i18nReady, setI18nReady] = useState(false);
 
   useEffect(() => {
-    ensureI18n().then(() => setI18nReady(true));
+    ensureI18n()
+      .then(() => setI18nReady(true))
+      .catch(() => setI18nReady(true));
   }, []);
 
   useEffect(() => {

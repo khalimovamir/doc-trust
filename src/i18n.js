@@ -77,35 +77,43 @@ let initDone = false;
  * - Later: if device language is supported → use it and remember; if not supported → keep last remembered language.
  */
 export async function ensureI18n() {
-  if (!initDone) {
-    initDone = true;
-    await i18n.use(initReactI18next).init({
-      resources: BUNDLED,
-      lng: FALLBACK_LNG,
-      fallbackLng: FALLBACK_LNG,
-      supportedLngs: SUPPORTED_LANGUAGES,
-      useSuspense: false,
-      escapeValue: false,
-      react: { useSuspense: false },
-    });
+  try {
+    if (!initDone) {
+      initDone = true;
+      await i18n.use(initReactI18next).init({
+        resources: BUNDLED,
+        lng: FALLBACK_LNG,
+        fallbackLng: FALLBACK_LNG,
+        supportedLngs: SUPPORTED_LANGUAGES,
+        useSuspense: false,
+        escapeValue: false,
+        react: { useSuspense: false },
+      });
+    }
+
+    let languageCode = FALLBACK_LNG;
+    try {
+      languageCode = getEffectiveSystemLocale().languageCode;
+    } catch (_) {}
+
+    const deviceSupported = toSupportedCode(languageCode);
+    const lastStored = await AsyncStorage.getItem(LAST_APP_LANGUAGE_KEY);
+
+    let langToUse;
+    if (deviceSupported) {
+      langToUse = deviceSupported;
+      await AsyncStorage.setItem(LAST_APP_LANGUAGE_KEY, deviceSupported);
+    } else if (lastStored && SUPPORTED_LANGUAGES.includes(lastStored)) {
+      langToUse = lastStored;
+    } else {
+      langToUse = FALLBACK_LNG;
+      await AsyncStorage.setItem(LAST_APP_LANGUAGE_KEY, FALLBACK_LNG);
+    }
+
+    await i18n.changeLanguage(langToUse);
+  } catch (_) {
+    // Ensure app still runs with fallback language
   }
-
-  const { languageCode } = getEffectiveSystemLocale();
-  const deviceSupported = toSupportedCode(languageCode);
-  const lastStored = await AsyncStorage.getItem(LAST_APP_LANGUAGE_KEY);
-
-  let langToUse;
-  if (deviceSupported) {
-    langToUse = deviceSupported;
-    await AsyncStorage.setItem(LAST_APP_LANGUAGE_KEY, deviceSupported);
-  } else if (lastStored && SUPPORTED_LANGUAGES.includes(lastStored)) {
-    langToUse = lastStored;
-  } else {
-    langToUse = FALLBACK_LNG;
-    await AsyncStorage.setItem(LAST_APP_LANGUAGE_KEY, FALLBACK_LNG);
-  }
-
-  await i18n.changeLanguage(langToUse);
 }
 
 /**

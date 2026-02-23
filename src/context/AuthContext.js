@@ -22,39 +22,53 @@ export function AuthProvider({ children }) {
   const [pendingPasswordReset, setPendingPasswordReset] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession()
-      .then(({ data: { session: s }, error }) => {
-        if (error || !s?.user) {
-          setSession(null);
-          if (error?.message?.includes('Refresh Token') || error?.message?.includes('refresh_token')) {
-            supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+    let subscription = { unsubscribe: () => {} };
+    try {
+      supabase.auth.getSession()
+        .then(({ data: { session: s }, error }) => {
+          try {
+            if (error || !s?.user) {
+              setSession(null);
+              if (error?.message?.includes('Refresh Token') || error?.message?.includes('refresh_token')) {
+                supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+              }
+            } else {
+              setSession(s);
+            }
+          } finally {
+            setIsLoading(false);
           }
-        } else {
-          setSession(s);
+        })
+        .catch((err) => {
+          try {
+            const msg = err?.message || '';
+            if (msg.includes('Refresh Token') || msg.includes('refresh_token') || msg.includes('Invalid')) {
+              supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+            }
+          } finally {
+            setSession(null);
+            setIsLoading(false);
+          }
+        });
+
+      const result = supabase.auth.onAuthStateChange?.((event, s) => {
+        try {
+          if (event === 'SIGNED_OUT' || !s?.user) {
+            setSession(null);
+          } else {
+            setSession(s);
+          }
+        } finally {
+          setIsLoading(false);
         }
-        setIsLoading(false);
-      })
-      .catch((err) => {
-        const msg = err?.message || '';
-        if (msg.includes('Refresh Token') || msg.includes('refresh_token') || msg.includes('Invalid')) {
-          supabase.auth.signOut({ scope: 'local' }).catch(() => {});
-        }
-        setSession(null);
-        setIsLoading(false);
       });
+      subscription = result?.data?.subscription ?? subscription;
+    } catch (_) {
+      setSession(null);
+      setIsLoading(false);
+    }
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, s) => {
-        if (event === 'SIGNED_OUT' || !s?.user) {
-          setSession(null);
-        } else {
-          setSession(s);
-        }
-        setIsLoading(false);
-      },
-    );
-
-    return () => subscription.unsubscribe();
+    return () => subscription?.unsubscribe?.();
   }, []);
 
   const signOut = async () => {

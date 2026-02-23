@@ -6,10 +6,7 @@
 
 import React from 'react';
 import { TouchableOpacity, Pressable, StyleSheet, Platform, View } from 'react-native';
-import {
-  LiquidGlassView,
-  isLiquidGlassSupported,
-} from '@callstack/liquid-glass';
+import { LiquidGlassView, isLiquidGlassSupported } from '../lib/liquidGlass';
 import { useTheme } from '../theme';
 
 export default function IconButton({
