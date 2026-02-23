@@ -13,7 +13,7 @@ import {
   ScrollView,
   TouchableOpacity,
 } from 'react-native';
-import { ChevronLeft, ChevronUp, Plus } from 'lucide-react-native';
+import { ChevronUp, Plus } from 'lucide-react-native';
 import { fontFamily, spacing, useTheme } from '../theme';
 import IconButton from '../components/IconButton';
 import { SkeletonFeatureCard } from '../components/Skeleton';
@@ -93,13 +93,9 @@ export default function FeatureRequestScreen({ navigation }) {
 
   React.useLayoutEffect(() => {
     navigation.setOptions({
-      headerBackVisible: false,
       headerStyle: { backgroundColor: colors.primaryBackground },
       headerTitleStyle: { color: colors.primaryText },
       headerTintColor: colors.primaryText,
-      headerLeft: () => (
-        <IconButton icon={ChevronLeft} onPress={handleBack} size={36} iconSize={22} />
-      ),
     });
   }, [navigation, colors]);
 

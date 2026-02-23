@@ -16,7 +16,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { ChevronLeft, Search, Check } from 'lucide-react-native';
+import { Search, Check } from 'lucide-react-native';
 import { fontFamily, spacing, borderRadius, useTheme } from '../theme';
 import IconButton from '../components/IconButton';
 import { useAuth } from '../context/AuthContext';
@@ -91,13 +91,9 @@ export default function JurisdictionScreen({ navigation }) {
 
   React.useLayoutEffect(() => {
     navigation.setOptions({
-      headerBackVisible: false,
       headerStyle: { backgroundColor: colors.primaryBackground },
       headerTitleStyle: { color: colors.primaryText },
       headerTintColor: colors.primaryText,
-      headerLeft: () => (
-        <IconButton icon={ChevronLeft} onPress={handleBack} size={36} iconSize={22} />
-      ),
     });
   }, [navigation, colors]);
 

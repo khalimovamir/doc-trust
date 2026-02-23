@@ -17,7 +17,6 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { ChevronLeft } from 'lucide-react-native';
 import { fontFamily, spacing, useTheme } from '../theme';
 import IconButton from '../components/IconButton';
 import { useAuth } from '../context/AuthContext';
@@ -88,13 +87,9 @@ export default function SendIdeaScreen({ navigation }) {
 
   React.useLayoutEffect(() => {
     navigation.setOptions({
-      headerBackVisible: false,
       headerStyle: { backgroundColor: colors.primaryBackground },
       headerTitleStyle: { color: colors.primaryText },
       headerTintColor: colors.primaryText,
-      headerLeft: () => (
-        <IconButton icon={ChevronLeft} onPress={handleBack} size={36} iconSize={22} />
-      ),
     });
   }, [navigation, colors]);
 

@@ -6,11 +6,10 @@
 import React, { useLayoutEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View, Platform, Alert } from 'react-native';
-import { ChevronLeft, EllipsisVertical } from 'lucide-react-native';
 import { MenuView } from '@react-native-menu/menu';
+import { NativeHeaderButtonBack, NativeHeaderButtonMenuIcon } from '../components/NativeHeaderButton';
 import { useAILawyerChat } from '../context/AILawyerChatContext';
 import { useTheme } from '../theme';
-import IconButton from '../components/IconButton';
 import ChatView from '../components/ChatView';
 import { deleteMessagesExceptFirst } from '../lib/chat';
 
@@ -67,16 +66,11 @@ export default function ChatScreen({ navigation }) {
       headerTitleStyle: { fontSize: 20, fontWeight: Platform.OS === 'android' ? '800' : '600', marginTop: 4, color: colors.primaryText },
       headerTintColor: colors.primaryText,
       headerLeft: () => (
-        <IconButton
-          icon={ChevronLeft}
-          onPress={() => navigation.goBack()}
-          size={36}
-          iconSize={22}
-        />
+        <NativeHeaderButtonBack onPress={() => navigation.goBack()} />
       ),
       headerRight: () => (
         <MenuView onPressAction={handleMenuAction} actions={chatMenuActions}>
-          <IconButton icon={EllipsisVertical} size={36} iconSize={20} />
+          <NativeHeaderButtonMenuIcon />
         </MenuView>
       ),
     });

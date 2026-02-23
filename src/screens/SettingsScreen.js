@@ -280,7 +280,7 @@ function createStyles(colors) {
     headerTitle: {
       fontFamily,
       fontSize: 24,
-      fontWeight: Platform.OS === 'android' ? '800' : '600',
+      fontWeight: '800',
       color: colors.primaryText,
     },
     scroll: {

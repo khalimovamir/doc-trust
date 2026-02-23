@@ -16,7 +16,7 @@ import {
   Alert,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { ChevronLeft, Pencil } from 'lucide-react-native';
+import { Pencil } from 'lucide-react-native';
 import { fontFamily, spacing, borderRadius, useTheme } from '../theme';
 import IconButton from '../components/IconButton';
 import { SkeletonForm } from '../components/Skeleton';
@@ -102,15 +102,8 @@ export default function EditProfileScreen({ navigation }) {
     }
   };
 
-  const handleBack = () => navigation.goBack();
-
   React.useLayoutEffect(() => {
-    navigation.setOptions({
-      headerBackVisible: false,
-      headerLeft: () => (
-        <IconButton icon={ChevronLeft} onPress={handleBack} size={36} iconSize={22} />
-      ),
-    });
+    navigation.setOptions({});
   }, [navigation]);
 
   if (loading && profile === undefined) {

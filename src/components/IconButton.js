@@ -9,6 +9,8 @@ import { TouchableOpacity, Pressable, StyleSheet, Platform, View } from 'react-n
 import { LiquidGlassView, isLiquidGlassSupported } from '../lib/liquidGlass';
 import { useTheme } from '../theme';
 
+const HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
+
 export default function IconButton({
   icon: Icon,
   onPress,
@@ -17,10 +19,12 @@ export default function IconButton({
   iconSize = 24,
   strokeWidth = 2,
   size = 44,
+  nativeStyle = false,
 }) {
   const { colors } = useTheme();
   const effectiveIconSize = Platform.OS === 'android' ? 24 : iconSize;
   const radius = size / 2;
+  const tintColor = iconColor ?? colors.primaryText;
   const fallbackStyle = {
     ...Platform.select({
       ios: {
@@ -41,6 +45,31 @@ export default function IconButton({
     }),
   };
 
+  if (nativeStyle) {
+    const iconOnly = Icon ? (
+      <Icon size={effectiveIconSize} color={tintColor} strokeWidth={strokeWidth} />
+    ) : null;
+    const wrap = (children) =>
+      onPress ? (
+        <Pressable
+          onPress={onPress}
+          hitSlop={HIT_SLOP}
+          style={({ pressed }) => [
+            styles.nativeWrap,
+            { width: size, height: size },
+            style,
+            pressed && styles.nativePressed,
+          ]}
+          android_ripple={Platform.OS === 'android' ? { color: 'rgba(0,0,0,0.1)', borderless: true } : undefined}
+        >
+          {children}
+        </Pressable>
+      ) : (
+        <View style={[styles.nativeWrap, { width: size, height: size }, style]}>{children}</View>
+      );
+    return wrap(iconOnly);
+  }
+
   const useGlass = Platform.OS === 'ios' && isLiquidGlassSupported;
   const content = (
     <View
@@ -58,7 +87,7 @@ export default function IconButton({
           {Icon && (
             <Icon
               size={effectiveIconSize}
-              color={iconColor ?? colors.primaryText}
+              color={tintColor}
               strokeWidth={strokeWidth}
             />
           )}
@@ -68,7 +97,7 @@ export default function IconButton({
           {Icon && (
             <Icon
               size={effectiveIconSize}
-              color={iconColor ?? colors.primaryText}
+              color={tintColor}
               strokeWidth={strokeWidth}
             />
           )}
@@ -113,5 +142,13 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  nativeWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  nativePressed: {
+    opacity: 0.6,
   },
 });

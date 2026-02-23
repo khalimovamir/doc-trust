@@ -54,6 +54,8 @@ function AuthNavigator() {
     headerTintColor: colors.primaryText,
     headerTitleStyle: { fontSize: 20, fontWeight: Platform.OS === 'android' ? '800' : '600', marginTop: 4, color: colors.primaryText },
     headerTitleAlign: 'center',
+    headerBackTitleVisible: false,
+    headerBackButtonDisplayMode: 'minimal',
   }), [colors]);
   const authHeaderOptions = useMemo(() => ({
     ...headerWithBackOptions,
@@ -102,6 +104,8 @@ function AppNavigatorInner() {
     headerTintColor: colors.primaryText,
     headerTitleStyle: { fontSize: 20, fontWeight: Platform.OS === 'android' ? '800' : '600', marginTop: 4, color: colors.primaryText },
     headerTitleAlign: 'center',
+    headerBackTitleVisible: false,
+    headerBackButtonDisplayMode: 'minimal',
   }), [colors]);
   return (
     <AILawyerChatProvider>

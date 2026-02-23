@@ -17,10 +17,9 @@ import {
   Platform,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { ChevronLeft, EllipsisVertical } from 'lucide-react-native';
 import { MenuView } from '@react-native-menu/menu';
+import { NativeHeaderButtonMenuIcon } from '../components/NativeHeaderButton';
 import { fontFamily, spacing, useTheme } from '../theme';
-import IconButton from '../components/IconButton';
 import { SkeletonDetails } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { useProfile } from '../context/ProfileContext';
@@ -195,21 +194,12 @@ export default function AnalysisResultScreen({ navigation, route }) {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerBackVisible: false,
       headerStyle: { backgroundColor: colors.primaryBackground },
       headerTitleStyle: { fontSize: 20, fontWeight: Platform.OS === 'android' ? '800' : '600', marginTop: 4, color: colors.primaryText },
       headerTintColor: colors.primaryText,
-      headerLeft: () => (
-        <IconButton
-          icon={ChevronLeft}
-          onPress={() => navigation.goBack()}
-          size={36}
-          iconSize={22}
-        />
-      ),
       headerRight: () => (
         <MenuView onPressAction={handleMenuAction} actions={menuActions}>
-          <IconButton icon={EllipsisVertical} size={36} iconSize={20} />
+          <NativeHeaderButtonMenuIcon />
         </MenuView>
       ),
     });

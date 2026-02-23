@@ -17,7 +17,7 @@ import {
   Platform,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import { ChevronLeft, ClipboardList } from 'lucide-react-native';
+import { ClipboardList } from 'lucide-react-native';
 import { fontFamily, spacing, useTheme } from '../theme';
 import IconButton from '../components/IconButton';
 
@@ -76,13 +76,9 @@ export default function PasteTextScreen({ navigation }) {
 
   React.useLayoutEffect(() => {
     navigation.setOptions({
-      headerBackVisible: false,
       headerStyle: { backgroundColor: colors.primaryBackground },
       headerTitleStyle: { color: colors.primaryText },
       headerTintColor: colors.primaryText,
-      headerLeft: () => (
-        <IconButton icon={ChevronLeft} onPress={() => navigation.goBack()} size={36} iconSize={22} />
-      ),
     });
   }, [navigation, colors]);
 

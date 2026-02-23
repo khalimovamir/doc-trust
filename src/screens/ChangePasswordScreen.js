@@ -15,7 +15,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, Eye, EyeOff } from 'lucide-react-native';
+import { Eye, EyeOff } from 'lucide-react-native';
 import { fontFamily, spacing, useTheme } from '../theme';
 import FormInput from '../components/FormInput';
 import PrimaryButton from '../components/PrimaryButton';
@@ -71,13 +71,9 @@ export default function ChangePasswordScreen({ navigation }) {
 
   React.useLayoutEffect(() => {
     navigation.setOptions({
-      headerBackVisible: false,
       headerStyle: { backgroundColor: colors.primaryBackground },
       headerTitleStyle: { color: colors.primaryText },
       headerTintColor: colors.primaryText,
-      headerLeft: () => (
-        <IconButton icon={ChevronLeft} onPress={() => navigation.goBack()} size={36} iconSize={22} />
-      ),
     });
   }, [navigation, colors]);
 

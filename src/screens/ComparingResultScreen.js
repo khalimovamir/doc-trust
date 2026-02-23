@@ -13,9 +13,9 @@ import {
 } from 'react-native';
 import { CommonActions } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
-import { ChevronLeft, FileText, ArrowRight } from 'lucide-react-native';
+import { FileText, ArrowRight } from 'lucide-react-native';
 import { fontFamily, spacing, useTheme } from '../theme';
-import IconButton from '../components/IconButton';
+import { NativeHeaderButtonBack } from '../components/NativeHeaderButton';
 import { maybeRequestReview } from '../lib/requestReview';
 
 function getTypeConfig(colors) {
@@ -127,11 +127,8 @@ export default function ComparingResultScreen({ navigation, route }) {
       headerTitleStyle: { color: colors.primaryText },
       headerTintColor: colors.primaryText,
       headerLeft: () => (
-        <IconButton
-          icon={ChevronLeft}
+        <NativeHeaderButtonBack
           onPress={() => navigation.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'Home' }] }))}
-          size={36}
-          iconSize={22}
         />
       ),
     });

@@ -18,7 +18,6 @@ import {
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import {
-  ChevronLeft,
   Circle,
   Sparkles,
   Lightbulb,
@@ -26,14 +25,13 @@ import {
   AlertOctagon,
   Copy,
   Globe,
-  EllipsisVertical,
 } from 'lucide-react-native';
 import { IconCircleCheckFilled } from '@tabler/icons-react-native';
 import { MenuView } from '@react-native-menu/menu';
+import { NativeHeaderButtonMenuIcon } from '../components/NativeHeaderButton';
 import Svg, { Circle as SvgCircle } from 'react-native-svg';
 
 import { fontFamily, spacing, useTheme } from '../theme';
-import IconButton from '../components/IconButton';
 import { SkeletonDetails } from '../components/Skeleton';
 import { useAILawyerChat } from '../context/AILawyerChatContext';
 import { useAnalysis } from '../context/AnalysisContext';
@@ -804,24 +802,15 @@ export default function DetailsScreen({ navigation, route }) {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerBackVisible: false,
       headerStyle: { backgroundColor: colors.primaryBackground },
       headerTitleStyle: { fontSize: 20, fontWeight: Platform.OS === 'android' ? '800' : '600', marginTop: 4, color: colors.primaryText },
       headerTintColor: colors.primaryText,
-      headerLeft: () => (
-        <IconButton
-          icon={ChevronLeft}
-          onPress={() => navigation.goBack()}
-          size={36}
-          iconSize={22}
-        />
-      ),
       headerRight: () => (
         <MenuView
           onPressAction={handleMenuAction}
           actions={menuActions}
         >
-          <IconButton icon={EllipsisVertical} size={36} iconSize={20} />
+          <NativeHeaderButtonMenuIcon />
         </MenuView>
       ),
     });

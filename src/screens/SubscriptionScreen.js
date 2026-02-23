@@ -14,7 +14,7 @@ import {
   ScrollView,
   TouchableOpacity,
 } from 'react-native';
-import { ChevronLeft, Check } from 'lucide-react-native';
+import { Check } from 'lucide-react-native';
 import { fontFamily, spacing, borderRadius, useTheme } from '../theme';
 import IconButton from '../components/IconButton';
 import { useSubscription } from '../context/SubscriptionContext';
@@ -117,13 +117,9 @@ export default function SubscriptionScreen({ navigation, route }) {
 
   React.useLayoutEffect(() => {
     navigation.setOptions({
-      headerBackVisible: false,
       headerStyle: { backgroundColor: colors.primaryBackground },
       headerTitleStyle: { color: colors.primaryText },
       headerTintColor: colors.primaryText,
-      headerLeft: () => (
-        <IconButton icon={ChevronLeft} onPress={handleBack} size={36} iconSize={22} />
-      ),
     });
   }, [navigation, colors]);
 

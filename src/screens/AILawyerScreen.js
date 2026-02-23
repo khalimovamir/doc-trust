@@ -19,15 +19,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  ChevronLeft,
-  EllipsisVertical,
-  MessageCircleQuestion,
-} from 'lucide-react-native';
+import { MessageCircleQuestion } from 'lucide-react-native';
 import { MenuView } from '@react-native-menu/menu';
+import { NativeHeaderButtonBack, NativeHeaderButtonMenuIcon } from '../components/NativeHeaderButton';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { fontFamily, spacing, borderRadius, useTheme } from '../theme';
-import IconButton from '../components/IconButton';
 import { useAILawyerTab } from '../context/AILawyerTabContext';
 import { useAILawyerChat } from '../context/AILawyerChatContext';
 import { useAuth } from '../context/AuthContext';
@@ -185,10 +181,10 @@ export default function AILawyerScreen({ navigation }) {
         ]}
       >
         <View style={[chatStyles.headerBar, { paddingTop: insets.top }]}>
-          <IconButton icon={ChevronLeft} onPress={goBack} size={36} iconSize={22} />
+          <NativeHeaderButtonBack onPress={goBack} />
           <Text style={chatStyles.headerTitle}>{t('tabs.aiLawyer')}</Text>
           <MenuView onPressAction={handleMenuAction} actions={chatMenuActions}>
-            <IconButton icon={EllipsisVertical} size={36} iconSize={20} />
+            <NativeHeaderButtonMenuIcon />
           </MenuView>
         </View>
         <ChatView chatPrompt={chatPrompt} chatContext={chatContext} />

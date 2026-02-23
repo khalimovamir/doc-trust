@@ -104,6 +104,7 @@ export default function OnboardingScreen({ navigation }) {
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
         decelerationRate="fast"
+        removeClippedSubviews={false}
       />
       <View style={styles.footer}>
         <View style={styles.dots}>

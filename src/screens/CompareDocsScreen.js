@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
-import { ChevronLeft, FileText, ArrowUpDown, X } from 'lucide-react-native';
+import { FileText, ArrowUpDown, X } from 'lucide-react-native';
 import { fontFamily, spacing, borderRadius, useTheme } from '../theme';
 import IconButton from '../components/IconButton';
 import { pickDocumentAndGetText } from '../lib/uploadDocument';
@@ -135,13 +135,9 @@ export default function CompareDocsScreen({ navigation, route }) {
 
   React.useLayoutEffect(() => {
     navigation.setOptions({
-      headerBackVisible: false,
       headerStyle: { backgroundColor: colors.primaryBackground },
       headerTitleStyle: { color: colors.primaryText },
       headerTintColor: colors.primaryText,
-      headerLeft: () => (
-        <IconButton icon={ChevronLeft} onPress={() => navigation.goBack()} size={36} iconSize={22} />
-      ),
     });
   }, [navigation, colors]);
 

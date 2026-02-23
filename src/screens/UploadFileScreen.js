@@ -14,9 +14,9 @@ import {
   ScrollView,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { ChevronLeft, FileText, Info, X } from 'lucide-react-native';
+import { FileText, X } from 'lucide-react-native';
 import { fontFamily, spacing, borderRadius, useTheme } from '../theme';
-import IconButton from '../components/IconButton';
+import { NativeHeaderButtonInfo } from '../components/NativeHeaderButton';
 import { pickDocumentAndGetText } from '../lib/uploadDocument';
 
 function createStyles(colors) {
@@ -83,18 +83,12 @@ export default function UploadFileScreen({ navigation }) {
 
   React.useLayoutEffect(() => {
     navigation.setOptions({
-      headerBackVisible: false,
       headerStyle: { backgroundColor: colors.primaryBackground },
-      headerTitleStyle: { color: colors.primaryText },
+      headerTitleStyle: { fontSize: 20, color: colors.primaryText },
       headerTintColor: colors.primaryText,
-      headerLeft: () => (
-        <IconButton icon={ChevronLeft} onPress={() => navigation.goBack()} size={36} iconSize={22} />
-      ),
-      headerRight: () => (
-        <IconButton icon={Info} size={36} iconSize={20} onPress={handleInfoPress} />
-      ),
+      headerRight: () => <NativeHeaderButtonInfo onPress={handleInfoPress} />,
     });
-  }, [navigation, t, colors]);
+  }, [navigation, colors, handleInfoPress]);
 
   const handlePickDocument = async () => {
     setError('');
