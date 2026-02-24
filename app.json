@@ -23,7 +23,7 @@
       "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "LSApplicationQueriesSchemes": ["prefs"]
+        "LSApplicationQueriesSchemes": ["prefs", "App-prefs", "app-settings"]
       }
     },
     "android": {
