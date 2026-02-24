@@ -191,7 +191,7 @@ export default function SettingsScreen({ navigation }) {
             subtitle={t('settings.languageSubtitle')}
             rowStyles={styles}
             colors={colors}
-            onPress={openLanguageSettings}
+            onPress={()=> Linking.openSettings()}
           />
           <SettingsRow
             icon={<Moon size={24} color={colors.primary} strokeWidth={2} />}

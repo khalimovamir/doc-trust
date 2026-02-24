@@ -14,7 +14,9 @@ const iosDir = path.join(root, 'ios');
 const workspace = path.join(iosDir, 'DocTrust.xcworkspace');
 const scheme = 'DocTrust';
 const bundleId = 'com.anonymous.ai-lawyer';
-const appPath = path.join(iosDir, 'build', 'Build', 'Products', 'Debug-iphonesimulator', 'DocTrust.app');
+// Use derived data path without spaces to avoid Xcode script invocation errors (project path may contain spaces)
+const derivedDataPath = path.join(require('os').tmpdir(), 'DocTrust-iOS-Build');
+const appPath = path.join(derivedDataPath, 'Build', 'Products', 'Debug-iphonesimulator', 'DocTrust.app');
 
 function run(cmd, opts = {}) {
   const result = spawnSync(cmd, { shell: true, stdio: 'inherit', cwd: root, ...opts });
@@ -49,7 +51,7 @@ console.log('Building for iOS Simulator:', deviceName);
 console.log('Destination:', destination);
 
 run(
-  `xcodebuild -workspace "${workspace}" -scheme "${scheme}" -configuration Debug -destination "${destination}" -derivedDataPath build build`,
+  `xcodebuild -workspace "${workspace}" -scheme "${scheme}" -configuration Debug -destination "${destination}" -derivedDataPath "${derivedDataPath}" build`,
   { cwd: iosDir }
 );
 

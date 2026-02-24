@@ -357,7 +357,10 @@ function ScoreRing({ score, size = RING_SIZE_DEFAULT, styles, colors }) {
   const CY = safeSize / 2;
   const circumference = Math.max(0, 2 * Math.PI * R);
   const scoreColor =
-    safeScore >= 70 ? colors.success : safeScore >= 50 ? colors.warning : colors.error;
+    safeScore === 0 ? colors.error
+    : safeScore >= 70 ? colors.success
+    : safeScore >= 50 ? colors.warning
+    : colors.error;
   const targetDashOffset = Math.max(0, Math.min(circumference, circumference * (1 - safeScore / 100)));
   const textSize = safeSize <= 56 ? 14 : 20;
 
@@ -399,7 +402,7 @@ function ScoreRing({ score, size = RING_SIZE_DEFAULT, styles, colors }) {
           cx={CX}
           cy={CY}
           r={R}
-          stroke={colors.alternate}
+          stroke={safeScore === 0 ? scoreColor : colors.alternate}
           strokeWidth={stroke}
           fill="none"
         />

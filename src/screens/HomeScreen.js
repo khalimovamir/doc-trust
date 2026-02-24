@@ -271,23 +271,13 @@ export default function HomeScreen({ navigation }) {
     });
   };
   const handleGetOffer = () => {
-    const offerToPass = currentOffer ?? activeOffer;
     const h = Number(SCREEN_HEIGHT) || 800;
     Animated.timing(sheetTranslateY, {
       toValue: h,
       duration: 220,
       useNativeDriver: false,
     }).start(({ finished }) => {
-      if (finished) {
-        setIsOfferSheetVisible(false);
-        const parent = navigation.getParent();
-        if (parent) {
-          parent.navigate('Subscription', {
-            fromOffer: true,
-            offerId: offerToPass?.id ?? null,
-          });
-        }
-      }
+      if (finished) setIsOfferSheetVisible(false);
     });
   };
   const handleScanPress = (item) => {
@@ -627,7 +617,7 @@ function createStyles(colors) {
     },
     offerClose: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
     offerSheet: {
-      backgroundColor: '#171819',
+      backgroundColor: '#0b1220',
       borderTopLeftRadius: 24,
       borderTopRightRadius: 24,
       paddingHorizontal: spacing.md,

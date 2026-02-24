@@ -5,6 +5,7 @@
   "scripts": {
     "test": "jest",
     "test:ci": "jest --ci",
+    "dev:ios": "CI=false npx expo run:ios",
     "start": "env -u CI expo start",
     "start:clear": "env -u CI expo start --clear",
     "start:watch": "env -u CI expo start --clear",
@@ -20,7 +21,7 @@
     "ios:clean": "rm -rf ios/build .expo node_modules/.cache $TMPDIR/metro-* $TMPDIR/haste-map-* 2>/dev/null; watchman watch-del-all 2>/dev/null; echo 'Cache cleared. Run: npx expo run:ios'",
     "ios:uninstall": "xcrun simctl uninstall booted com.anonymous.ai-lawyer 2>/dev/null; echo 'App removed from simulator'",
     "ios:fresh": "xcrun simctl uninstall booted com.anonymous.ai-lawyer 2>/dev/null; SENTRY_DISABLE_AUTO_UPLOAD=true env -u CI sh -c 'npx expo start --clear & sleep 12 && npx expo run:ios --no-bundler; wait'",
-    "ios:run": "SENTRY_DISABLE_AUTO_UPLOAD=true env -u CI npx expo run:ios --no-bundler",
+    "ios:run": "SENTRY_DISABLE_AUTO_UPLOAD=true env -u CI npx expo run:ios --no-bundler -d \"iPhone 17 Pro\"",
     "android:run": "REACT_NATIVE_PACKAGER_HOSTNAME=10.0.2.2 env -u CI npx expo run:android --no-bundler",
     "ios:dev": "SENTRY_DISABLE_AUTO_UPLOAD=true env -u CI npx expo run:ios",
     "ios:simulator": "SENTRY_DISABLE_AUTO_UPLOAD=true env -u CI node scripts/run-ios-simulator.js",
