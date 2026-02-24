@@ -16,8 +16,11 @@ import {
   Alert,
   ScrollView,
   Platform,
+  Animated,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { useFocusEffect } from '@react-navigation/native';
+import { launchScanner } from '@dariyd/react-native-document-scanner';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { X, Plus, ChevronLeft, Zap, Check, Info } from 'lucide-react-native';
@@ -50,17 +53,17 @@ function createStyles(colors) {
       gap: spacing.sm,
     },
     controlButton: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
+      width: 52,
+      height: 52,
+      borderRadius: 26,
       backgroundColor: 'rgba(255,255,255,0.13)',
       alignItems: 'center',
       justifyContent: 'center',
     },
     cameraWrap: { flex: 1, overflow: 'hidden' },
     camera: { flex: 1, width: '100%' },
-    cardsRowWrap: { backgroundColor: '#0b1220', paddingVertical: spacing.sm },
-    cardsRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, gap: spacing.sm },
+    cardsRowWrap: { backgroundColor: '#0b1220', paddingTop: 8, paddingBottom: spacing.sm, overflow: 'visible' },
+    cardsRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, paddingTop: 10, gap: spacing.sm },
     cardWrap: { position: 'relative' },
     card: { width: CARD_SIZE, height: CARD_SIZE, borderRadius: 12, overflow: 'hidden', borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
     cardTarget: { borderColor: colors.primary, borderWidth: 2.5 },
@@ -83,7 +86,7 @@ function createStyles(colors) {
       borderWidth: 2,
       borderStyle: 'dashed',
       borderColor: 'rgba(255,255,255,0.4)',
-      backgroundColor: 'rgba(255,255,255,0.08)',
+      backgroundColor: 'transparent',
     },
     cardPlus: {
       width: CARD_SIZE,
@@ -92,7 +95,7 @@ function createStyles(colors) {
       borderWidth: 2,
       borderStyle: 'dashed',
       borderColor: 'rgba(255,255,255,0.5)',
-      backgroundColor: 'rgba(255,255,255,0.12)',
+      backgroundColor: 'transparent',
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -127,6 +130,12 @@ function createStyles(colors) {
       borderRadius: 40,
       borderWidth: 4,
       borderColor: '#fff',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    captureButtonInnerWrap: {
+      width: '100%',
+      height: '100%',
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -180,6 +189,7 @@ export default function ScannerScreen({ navigation }) {
   const styles = useMemo(() => StyleSheet.create(createStyles(colors)), [colors]);
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef(null);
+  const captureScale = useRef(new Animated.Value(1)).current;
 
   const [scans, setScans] = useState([]);
   const [slotCount, setSlotCount] = useState(5);
@@ -188,15 +198,32 @@ export default function ScannerScreen({ navigation }) {
   const [torchOn, setTorchOn] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [error, setError] = useState('');
+  const [galleryGranted, setGalleryGranted] = useState(null);
+
+  const ImagePicker = useMemo(() => require('expo-image-picker'), []);
+
+  const checkGalleryPermission = useCallback(async () => {
+    const { status } = await ImagePicker.getMediaLibraryPermissionsAsync();
+    setGalleryGranted(status === 'granted');
+  }, [ImagePicker]);
+
+  useEffect(() => {
+    if (permission?.granted) {
+      checkGalleryPermission();
+    } else {
+      setGalleryGranted(null);
+    }
+  }, [permission?.granted, checkGalleryPermission]);
 
   const requestGalleryPermission = useCallback(async () => {
-    const { status } = await require('expo-image-picker').requestMediaLibraryPermissionsAsync();
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    setGalleryGranted(status === 'granted');
     if (status !== 'granted') {
       Alert.alert(t('common.error'), t('scanner.permissionGallery'));
       return false;
     }
     return true;
-  }, [t]);
+  }, [t, ImagePicker]);
 
   const addScanAt = useCallback((uri, mimeType, atIndex) => {
     setScans((prev) => {
@@ -205,6 +232,21 @@ export default function ScannerScreen({ navigation }) {
       return next.slice(0, MAX_SCANS);
     });
     setTargetSlotIndex((prev) => Math.min(prev + 1, MAX_SCANS - 1));
+    setError('');
+  }, []);
+
+  const addScansAt = useCallback((images, startIndex) => {
+    if (!images?.length) return;
+    setScans((prev) => {
+      let next = [...prev];
+      let at = startIndex;
+      for (const img of images) {
+        next.splice(at, 0, { uri: img.uri, mimeType: img.type || 'image/jpeg' });
+        at++;
+      }
+      return next.slice(0, MAX_SCANS);
+    });
+    setTargetSlotIndex((prev) => Math.min(prev + images.length, MAX_SCANS - 1));
     setError('');
   }, []);
 
@@ -220,22 +262,33 @@ export default function ScannerScreen({ navigation }) {
       const ok = await requestPermission();
       if (!ok) return;
     }
-    if (!cameraRef.current) return;
     try {
-      const result = await cameraRef.current.takePictureAsync({
-        quality: 0.9,
-        base64: false,
-      });
-      if (result?.uri) addScanAt(result.uri, 'image/jpeg', targetSlotIndex);
+      const result = await launchScanner({ quality: 0.9, includeBase64: false });
+      if (result.didCancel) return;
+      if (result.error) {
+        Alert.alert(t('common.error'), result.errorMessage || t('scanner.noTextFound'));
+        return;
+      }
+      const images = result.images;
+      if (images?.length) {
+        addScansAt(images, targetSlotIndex);
+      }
     } catch (e) {
       Alert.alert(t('common.error'), e?.message || t('scanner.noTextFound'));
     }
-  }, [scans.length, slotCount, permission?.granted, requestPermission, addScanAt, targetSlotIndex, t]);
+  }, [scans.length, slotCount, permission?.granted, requestPermission, addScansAt, targetSlotIndex, t]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (permission?.granted) {
+        checkGalleryPermission();
+      }
+    }, [permission?.granted, checkGalleryPermission])
+  );
 
   const handleChooseGallery = useCallback(async () => {
     if (scans.length >= slotCount) return;
     if (!(await requestGalleryPermission())) return;
-    const ImagePicker = require('expo-image-picker');
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: false,
@@ -245,7 +298,7 @@ export default function ScannerScreen({ navigation }) {
     const asset = result.assets[0];
     setLastGalleryUri(asset.uri);
     addScanAt(asset.uri, asset.mimeType || 'image/jpeg', targetSlotIndex);
-  }, [scans.length, slotCount, requestGalleryPermission, addScanAt, targetSlotIndex]);
+  }, [scans.length, slotCount, requestGalleryPermission, addScanAt, targetSlotIndex, ImagePicker]);
 
   const handleStartAnalyzing = useCallback(async () => {
     if (scans.length === 0) return;
@@ -275,12 +328,6 @@ export default function ScannerScreen({ navigation }) {
     }
   }, [scans, t, navigation]);
 
-  useEffect(() => {
-    if (permission?.granted) {
-      require('expo-image-picker').requestMediaLibraryPermissionsAsync();
-    }
-  }, [permission?.granted]);
-
   const canAddMore = slotCount < MAX_SCANS;
   const hasScans = scans.length > 0;
 
@@ -309,15 +356,46 @@ export default function ScannerScreen({ navigation }) {
     );
   }
 
+  if (galleryGranted === null) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (!galleryGranted) {
+    return (
+      <SafeAreaView style={[styles.container, { justifyContent: 'center', padding: spacing.lg }]} edges={['top']}>
+        <Text style={{ fontFamily, fontSize: 16, color: '#fff', textAlign: 'center', marginBottom: spacing.md }}>
+          {t('scanner.permissionGallery')}
+        </Text>
+        <TouchableOpacity
+          style={{ paddingVertical: 12, paddingHorizontal: 24, backgroundColor: colors.primary, borderRadius: 12 }}
+          onPress={requestGalleryPermission}
+        >
+          <Text style={styles.permissionButtonText}>{t('common.next')}</Text>
+        </TouchableOpacity>
+        <IconButton icon={ChevronLeft} onPress={() => navigation.goBack()} size={36} iconSize={22} style={{ position: 'absolute', left: spacing.md, top: spacing.lg }} />
+      </SafeAreaView>
+    );
+  }
+
+  const selectedScan = scans[targetSlotIndex];
+
   return (
     <View style={styles.container}>
       <View style={styles.cameraWrap}>
-        <CameraView
-          ref={cameraRef}
-          style={styles.camera}
-          facing="back"
-          enableTorch={torchOn}
-        />
+        {selectedScan ? (
+          <Image source={{ uri: selectedScan.uri }} style={styles.camera} resizeMode="contain" />
+        ) : (
+          <CameraView
+            ref={cameraRef}
+            style={styles.camera}
+            facing="back"
+            enableTorch={torchOn}
+          />
+        )}
         {extracting && (
           <View style={styles.extractingOverlay}>
             <ActivityIndicator size="large" color="#fff" />
@@ -425,10 +503,18 @@ export default function ScannerScreen({ navigation }) {
             <TouchableOpacity
               style={styles.captureButton}
               onPress={handleTakePhoto}
+              onPressIn={() => {
+                Animated.spring(captureScale, { toValue: 0.9, useNativeDriver: true, speed: 100, bounciness: 0 }).start();
+              }}
+              onPressOut={() => {
+                Animated.spring(captureScale, { toValue: 1, useNativeDriver: true, speed: 100, bounciness: 6 }).start();
+              }}
               disabled={extracting || !canAddMore}
-              activeOpacity={0.9}
+              activeOpacity={1}
             >
-              <View style={styles.captureInner} />
+              <Animated.View style={[styles.captureButtonInnerWrap, { transform: [{ scale: captureScale }] }]}>
+                <View style={styles.captureInner} />
+              </Animated.View>
             </TouchableOpacity>
           </View>
           <TouchableOpacity

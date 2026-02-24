@@ -33,6 +33,7 @@
     "postinstall": "patch-package"
   },
   "dependencies": {
+    "@dariyd/react-native-document-scanner": "^2.0.17",
     "@expo/metro-config": "~54.0.14",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-menu/menu": "^2.0.0",
@@ -76,11 +77,11 @@
   },
   "private": true,
   "devDependencies": {
-    "babel-preset-expo": "~13.0.0",
-    "patch-package": "^8.0.0",
     "@types/react": "~19.1.10",
+    "babel-preset-expo": "~13.0.0",
     "eas-cli": "^13.0.0",
     "jest": "^30.2.0",
+    "patch-package": "^8.0.0",
     "typescript": "~5.9.2"
   }
 }
