@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { MenuView } from '@react-native-menu/menu';
-import { NativeHeaderButtonMenuIcon } from '../components/NativeHeaderButton';
+import { NativeHeaderButtonEllipsis } from '../components/NativeHeaderButton';
 import { fontFamily, spacing, useTheme } from '../theme';
 import { SkeletonDetails } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
@@ -49,7 +49,7 @@ import {
 
 export default function AnalysisResultScreen({ navigation, route }) {
   const { t } = useTranslation();
-  const { colors } = useTheme();
+  const { colors, isDarkMode } = useTheme();
   const { user } = useAuth();
   const { profile } = useProfile();
   const { analysis, setAnalysis } = useAnalysis();
@@ -62,8 +62,15 @@ export default function AnalysisResultScreen({ navigation, route }) {
   const issueTypeConfig = useMemo(() => getIssueTypeConfig(colors), [colors]);
   const localStyles = useMemo(() => StyleSheet.create(createLocalStyles(colors)), [colors]);
   const menuActions = React.useMemo(
-    () => [{ id: 'export', title: t('details.exportPdf') }],
-    [t]
+    () => [
+      {
+        id: 'export',
+        title: t('details.exportPdf'),
+        image: Platform.select({ ios: 'square.and.arrow.down', android: 'ic_menu_save' }),
+        imageColor: Platform.select({ ios: colors.primaryText, android: colors.primaryText }),
+      },
+    ],
+    [t, colors.primaryText]
   );
 
   const [activeTab, setActiveTab] = useState(0);
@@ -162,14 +169,16 @@ export default function AnalysisResultScreen({ navigation, route }) {
     [analysis, openChat, navigation, title]
   );
 
+  const exportPdfRef = useRef(() => {});
+  exportPdfRef.current = () => {
+    const currentAnalysis = analysisRef.current;
+    exportAnalysisToPdf(currentAnalysis).catch((e) =>
+      Alert.alert(t('details.exportFailed'), e?.message || t('details.couldNotCreatePdf'))
+    );
+  };
   const handleMenuAction = useCallback(({ nativeEvent }) => {
-    if (nativeEvent.event === 'export') {
-      const currentAnalysis = analysisRef.current;
-      exportAnalysisToPdf(currentAnalysis).catch((e) =>
-        Alert.alert(t('details.exportFailed'), e?.message || t('details.couldNotCreatePdf'))
-      );
-    }
-  }, [t]);
+    if (nativeEvent.event === 'export') exportPdfRef.current();
+  }, []);
 
   const onJurisdictionEdit = useCallback(() => {
     fromJurisdictionRef.current = true;
@@ -198,12 +207,15 @@ export default function AnalysisResultScreen({ navigation, route }) {
       headerTitleStyle: { fontSize: 20, fontWeight: Platform.OS === 'android' ? '800' : '600', marginTop: 4, color: colors.primaryText },
       headerTintColor: colors.primaryText,
       headerRight: () => (
-        <MenuView onPressAction={handleMenuAction} actions={menuActions}>
-          <NativeHeaderButtonMenuIcon />
-        </MenuView>
+        <View style={styles.menuButtonWrap}>
+          <MenuView onPressAction={handleMenuAction} actions={menuActions} themeVariant={isDarkMode ? 'dark' : 'light'} style={styles.menuButtonWrap}>
+            <NativeHeaderButtonEllipsis iconSize={24} />
+          </MenuView>
+        </View>
       ),
+      headerRightContainerStyle: { width: 44, height: 44, maxWidth: 44, maxHeight: 44, flexGrow: 0, flexShrink: 0 },
     });
-  }, [navigation, handleMenuAction, colors]);
+  }, [navigation, colors, menuActions, isDarkMode]);
 
   const filteredIssues =
     activeFilter === 'all' ? redFlags : redFlags.filter((item) => item.type === activeFilter);

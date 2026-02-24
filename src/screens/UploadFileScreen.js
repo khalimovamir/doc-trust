@@ -12,12 +12,13 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { FileText, X } from 'lucide-react-native';
 import { fontFamily, spacing, borderRadius, useTheme } from '../theme';
-import { NativeHeaderButtonInfo } from '../components/NativeHeaderButton';
 import { pickDocumentAndGetText } from '../lib/uploadDocument';
+import { NativeHeaderButtonInfo } from '../components/NativeHeaderButton';
 
 function createStyles(colors) {
   return {
@@ -86,9 +87,26 @@ export default function UploadFileScreen({ navigation }) {
       headerStyle: { backgroundColor: colors.primaryBackground },
       headerTitleStyle: { fontSize: 20, color: colors.primaryText },
       headerTintColor: colors.primaryText,
-      headerRight: () => <NativeHeaderButtonInfo onPress={handleInfoPress} />,
+      // iOS: нативная кнопка в app bar — такой же круглый вид, как кнопка «назад».
+      ...(Platform.OS === 'ios'
+        ? {
+            unstable_headerRightItems: () => [
+              {
+                type: 'button',
+                label: '',
+                icon: { type: 'sfSymbol', name: 'info.circle' },
+                onPress: handleInfoPress,
+              },
+            ],
+          }
+        : {
+            headerRight: () => (
+              <NativeHeaderButtonInfo onPress={handleInfoPress} iconSize={24} />
+            ),
+            headerRightContainerStyle: { width: 44, maxWidth: 44, flexGrow: 0, flexShrink: 0 },
+          }),
     });
-  }, [navigation, colors, handleInfoPress]);
+  }, [navigation, colors, t]);
 
   const handlePickDocument = async () => {
     setError('');

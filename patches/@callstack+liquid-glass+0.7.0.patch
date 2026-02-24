@@ -1,0 +1,55 @@
+diff --git a/node_modules/@callstack/liquid-glass/lib/module/LiquidGlassViewContainerNativeComponent.ts b/node_modules/@callstack/liquid-glass/lib/module/LiquidGlassViewContainerNativeComponent.ts
+index 40dae13..2d2f87f 100644
+--- a/node_modules/@callstack/liquid-glass/lib/module/LiquidGlassViewContainerNativeComponent.ts
++++ b/node_modules/@callstack/liquid-glass/lib/module/LiquidGlassViewContainerNativeComponent.ts
+@@ -1,15 +1,12 @@
+-import {
+-  codegenNativeComponent,
+-  type ViewProps,
+-  type CodegenTypes,
+-} from 'react-native';
++import { codegenNativeComponent, type ViewProps } from 'react-native';
++import type { Float } from 'react-native/Libraries/Types/CodegenTypesNamespace';
+ 
+ export interface NativeProps extends ViewProps {
+   /**
+    * The distance between elements at which they begin to merge.
+    * Defaults to 0.
+    */
+-  spacing?: CodegenTypes.Float;
++  spacing?: Float;
+ }
+ 
+ export default codegenNativeComponent<NativeProps>('LiquidGlassContainerView');
+diff --git a/node_modules/@callstack/liquid-glass/lib/module/LiquidGlassViewNativeComponent.ts b/node_modules/@callstack/liquid-glass/lib/module/LiquidGlassViewNativeComponent.ts
+index 9c0839d..bb60c21 100644
+--- a/node_modules/@callstack/liquid-glass/lib/module/LiquidGlassViewNativeComponent.ts
++++ b/node_modules/@callstack/liquid-glass/lib/module/LiquidGlassViewNativeComponent.ts
+@@ -2,8 +2,8 @@ import {
+   codegenNativeComponent,
+   type ViewProps,
+   type ColorValue,
+-  type CodegenTypes,
+ } from 'react-native';
++import type { WithDefault } from 'react-native/Libraries/Types/CodegenTypesNamespace';
+ 
+ export interface NativeProps extends ViewProps {
+   /**
+@@ -19,7 +19,7 @@ export interface NativeProps extends ViewProps {
+    *
+    * Defaults to 'regular'.
+    */
+-  effect?: CodegenTypes.WithDefault<'clear' | 'regular' | 'none', 'regular'>;
++  effect?: WithDefault<'clear' | 'regular' | 'none', 'regular'>;
+   /**
+    * The color of the glass effect.
+    *
+@@ -32,7 +32,7 @@ export interface NativeProps extends ViewProps {
+    *
+    * Defaults to 'system'.
+    */
+-  colorScheme?: CodegenTypes.WithDefault<'light' | 'dark' | 'system', 'system'>;
++  colorScheme?: WithDefault<'light' | 'dark' | 'system', 'system'>;
+ }
+ 
+ export default codegenNativeComponent<NativeProps>('LiquidGlassView');

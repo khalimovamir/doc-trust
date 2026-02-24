@@ -7,7 +7,7 @@ import React, { useLayoutEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { View, Platform, Alert } from 'react-native';
 import { MenuView } from '@react-native-menu/menu';
-import { NativeHeaderButtonBack, NativeHeaderButtonMenuIcon } from '../components/NativeHeaderButton';
+import { NativeHeaderButtonBack, NativeHeaderButtonEllipsis } from '../components/NativeHeaderButton';
 import { useAILawyerChat } from '../context/AILawyerChatContext';
 import { useTheme } from '../theme';
 import ChatView from '../components/ChatView';
@@ -15,7 +15,7 @@ import { deleteMessagesExceptFirst } from '../lib/chat';
 
 export default function ChatScreen({ navigation }) {
   const { t } = useTranslation();
-  const { colors } = useTheme();
+  const { colors, isDarkMode } = useTheme();
   const { chatPrompt, chatContext, currentChatId, setRefreshChatTrigger } = useAILawyerChat();
   const currentChatIdRef = useRef(currentChatId);
   currentChatIdRef.current = currentChatId;
@@ -69,12 +69,26 @@ export default function ChatScreen({ navigation }) {
         <NativeHeaderButtonBack onPress={() => navigation.goBack()} />
       ),
       headerRight: () => (
-        <MenuView onPressAction={handleMenuAction} actions={chatMenuActions}>
-          <NativeHeaderButtonMenuIcon />
-        </MenuView>
+        <View style={menuButtonWrapStyle}>
+          <MenuView onPressAction={handleMenuAction} actions={chatMenuActions} themeVariant={isDarkMode ? 'dark' : 'light'} style={menuButtonWrapStyle}>
+            <NativeHeaderButtonEllipsis />
+          </MenuView>
+        </View>
       ),
+      headerRightContainerStyle: { width: 44, height: 44, maxWidth: 44, maxHeight: 44, flexGrow: 0, flexShrink: 0 },
     });
-  }, [navigation, t, chatMenuActions, colors]);
+  }, [navigation, t, chatMenuActions, colors, isDarkMode]);
 
   return <ChatView chatPrompt={chatPrompt} chatContext={chatContext} />;
 }
+
+const menuButtonWrapStyle = {
+  width: 44,
+  height: 44,
+  minWidth: 44,
+  minHeight: 44,
+  maxWidth: 44,
+  maxHeight: 44,
+  justifyContent: 'center',
+  alignItems: 'center',
+};

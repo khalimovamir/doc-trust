@@ -21,7 +21,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MessageCircleQuestion } from 'lucide-react-native';
 import { MenuView } from '@react-native-menu/menu';
-import { NativeHeaderButtonBack, NativeHeaderButtonMenuIcon } from '../components/NativeHeaderButton';
+import { NativeHeaderButtonBack, NativeHeaderButtonEllipsis } from '../components/NativeHeaderButton';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { fontFamily, spacing, borderRadius, useTheme } from '../theme';
 import { useAILawyerTab } from '../context/AILawyerTabContext';
@@ -32,11 +32,22 @@ import ChatView, { ASSISTANT_GREETING } from '../components/ChatView';
 
 const QUICK_PROMPT_KEYS = ['aiLawyer.prompt1', 'aiLawyer.prompt2', 'aiLawyer.prompt3', 'aiLawyer.prompt4'];
 
+const menuButtonWrapStyle = {
+  width: 44,
+  height: 44,
+  minWidth: 44,
+  minHeight: 44,
+  maxWidth: 44,
+  maxHeight: 44,
+  justifyContent: 'center',
+  alignItems: 'center',
+};
+
 /* ── Main screen ── */
 
 export default function AILawyerScreen({ navigation }) {
   const { t } = useTranslation();
-  const { colors } = useTheme();
+  const { colors, isDarkMode } = useTheme();
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
   const paddingBottom = Math.max(0, Number(tabBarHeight) || 0);
@@ -183,9 +194,11 @@ export default function AILawyerScreen({ navigation }) {
         <View style={[chatStyles.headerBar, { paddingTop: insets.top }]}>
           <NativeHeaderButtonBack onPress={goBack} />
           <Text style={chatStyles.headerTitle}>{t('tabs.aiLawyer')}</Text>
-          <MenuView onPressAction={handleMenuAction} actions={chatMenuActions}>
-            <NativeHeaderButtonMenuIcon />
-          </MenuView>
+          <View style={menuButtonWrapStyle}>
+            <MenuView onPressAction={handleMenuAction} actions={chatMenuActions} themeVariant={isDarkMode ? 'dark' : 'light'} style={menuButtonWrapStyle}>
+              <NativeHeaderButtonEllipsis />
+            </MenuView>
+          </View>
         </View>
         <ChatView chatPrompt={chatPrompt} chatContext={chatContext} />
       </Animated.View>

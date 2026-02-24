@@ -12,7 +12,6 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Image,
   Alert,
   ActivityIndicator,
 } from 'react-native';
@@ -22,15 +21,7 @@ import IconButton from '../components/IconButton';
 import { useAuth } from '../context/AuthContext';
 import { useProfile } from '../context/ProfileContext';
 import { updateProfile } from '../lib/profile';
-
-const JURISDICTION_IDS = [
-  { id: 'US', flag: require('../../assets/flag-us.png'), legalSystem: 'Common Law' },
-  { id: 'RU', flag: require('../../assets/flag-ru.png'), legalSystem: 'Civil Law' },
-  { id: 'DE', flag: require('../../assets/flag-de.png'), legalSystem: 'Civil Law' },
-  { id: 'KR', flag: require('../../assets/flag-kr.png'), legalSystem: 'Civil Law' },
-  { id: 'ES', flag: require('../../assets/flag-es.png'), legalSystem: 'Civil Law' },
-  { id: 'PT', flag: require('../../assets/flag-pt.png'), legalSystem: 'Civil Law' },
-];
+import { JURISDICTION_IDS } from '../lib/jurisdictions';
 
 function createStyles(colors) {
   return {
@@ -41,7 +32,6 @@ function createStyles(colors) {
     scrollContent: { paddingHorizontal: spacing.md, paddingTop: 12, paddingBottom: spacing.xxl, gap: spacing.sm },
     card: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.secondaryBackground, borderRadius: 20, padding: spacing.md, gap: spacing.sm, borderWidth: 1, borderColor: colors.tertiary },
     cardSelected: { borderColor: colors.primary },
-    flag: { width: 32, height: 32, borderRadius: 16 },
     cardText: { flex: 1 },
     cardTitle: { fontFamily, fontSize: 16, fontWeight: '500', color: colors.primaryText },
     cardSubtitle: { fontFamily, fontSize: 14, fontWeight: '400', color: colors.secondaryText, marginTop: spacing.xxs },
@@ -125,7 +115,6 @@ export default function JurisdictionScreen({ navigation }) {
               disabled={saving}
               activeOpacity={0.8}
             >
-              <Image source={item.flag} style={styles.flag} resizeMode="cover" />
               <View style={styles.cardText}>
                 <Text style={styles.cardTitle}>{item.name}</Text>
                 <Text style={styles.cardSubtitle}>{item.legalSystem}</Text>

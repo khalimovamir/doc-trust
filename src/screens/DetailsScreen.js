@@ -3,7 +3,7 @@
  * Design from Figma: analysis results with Summary / Red Flags / Guidance tabs
  */
 
-import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -28,7 +28,7 @@ import {
 } from 'lucide-react-native';
 import { IconCircleCheckFilled } from '@tabler/icons-react-native';
 import { MenuView } from '@react-native-menu/menu';
-import { NativeHeaderButtonMenuIcon } from '../components/NativeHeaderButton';
+import { NativeHeaderButtonEllipsis } from '../components/NativeHeaderButton';
 import Svg, { Circle as SvgCircle } from 'react-native-svg';
 
 import { fontFamily, spacing, useTheme } from '../theme';
@@ -43,19 +43,14 @@ import { exportAnalysisToPdf } from '../lib/exportPdf';
 
 const TABS_KEYS = ['tabSummary', 'tabRedFlags', 'tabGuidance'];
 
-const JURISDICTION_FLAGS = {
-  US: require('../../assets/flag-us.png'),
-  RU: require('../../assets/flag-ru.png'),
-  DE: require('../../assets/flag-de.png'),
-  KR: require('../../assets/flag-kr.png'),
-  ES: require('../../assets/flag-es.png'),
-  PT: require('../../assets/flag-pt.png'),
-};
-
-/* ── Segmented Control (3 tabs, draggable indicator) ── */
+/* ── Segmented Control (3 tabs, iOS-style, draggable indicator) ── */
 const SEGMENT_PADDING = 4;
+const SEGMENT_HEIGHT = 42;
+const SEGMENT_RADIUS = 12;
+const INDICATOR_RADIUS = 9;
 
 function DraggableSegmentedControl({ activeIndex, onIndexChange, labels, styles }) {
+  const { colors } = useTheme();
   const count = labels.length;
   const [segmentWidth, setSegmentWidth] = useState(0);
   const tabWidth = segmentWidth > 0 ? (segmentWidth - SEGMENT_PADDING * 2) / count : 0;
@@ -83,7 +78,7 @@ function DraggableSegmentedControl({ activeIndex, onIndexChange, labels, styles 
     }
   };
 
-  const switchTab = (index) => {
+  const switchTab = useCallback((index) => {
     const tw = tabWidthRef.current;
     if (tw <= 0) return;
     Animated.timing(indicatorX, {
@@ -92,7 +87,7 @@ function DraggableSegmentedControl({ activeIndex, onIndexChange, labels, styles 
       useNativeDriver: false,
     }).start();
     if (typeof onIndexChangeRef.current === 'function') onIndexChangeRef.current(index);
-  };
+  }, [indicatorX]);
 
   useEffect(() => {
     const tw = tabWidthRef.current;
@@ -102,12 +97,12 @@ function DraggableSegmentedControl({ activeIndex, onIndexChange, labels, styles 
       duration: 200,
       useNativeDriver: false,
     }).start();
-  }, [activeIndex]);
+  }, [activeIndex, indicatorX]);
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponderCapture: (_, g) => Math.abs(g.dx) > 5,
+      onMoveShouldSetPanResponderCapture: (_, g) => Math.abs(g.dx) > 10,
       onPanResponderGrant: () => { startX.current = currentX.current; },
       onPanResponderMove: (_, g) => {
         const tw = tabWidthRef.current;
@@ -132,23 +127,31 @@ function DraggableSegmentedControl({ activeIndex, onIndexChange, labels, styles 
   ).current;
 
   return (
-    <View style={styles.segmentedControl} onLayout={onSegmentLayout} {...panResponder.panHandlers}>
+    <View
+      style={styles.segmentContainer}
+      onLayout={onSegmentLayout}
+      {...panResponder.panHandlers}
+    >
       {tabWidth > 0 && (
         <Animated.View
-          style={[styles.segmentPill, { width: tabWidth, transform: [{ translateX: indicatorX }] }]}
+          style={[
+            styles.segmentIndicator,
+            { width: tabWidth },
+            { transform: [{ translateX: indicatorX }] },
+          ]}
         />
       )}
       {labels.map((label, index) => (
         <TouchableOpacity
           key={label}
-          style={styles.segmentTab}
+          style={styles.segmentButton}
           onPress={() => switchTab(index)}
           activeOpacity={0.7}
         >
           <Text
             style={[
-              styles.segmentTabText,
-              activeIndex === index && styles.segmentTabTextActive,
+              styles.segmentText,
+              { color: activeIndex === index ? colors.primaryText : colors.secondaryText },
             ]}
           >
             {label}
@@ -618,13 +621,6 @@ function SummaryContent({ analysis, jurisdictionCode, onJurisdictionEdit, hideJu
         <View style={styles.jurisdictionSection}>
           <Text style={styles.sCardTitle}>{t('analysis.jurisdictionTitle')}</Text>
           <View style={styles.jurisdictionCard}>
-            <View style={styles.jurisdictionFlag}>
-              <Image
-                source={JURISDICTION_FLAGS[jurisdictionCode] || JURISDICTION_FLAGS.US}
-                style={styles.jurisdictionFlagImg}
-                resizeMode="cover"
-              />
-            </View>
             <View style={styles.jurisdictionInfo}>
               <Text style={styles.jurisdictionCountry}>{t('jurisdictions.country' + (jurisdictionCode || 'US'))}</Text>
               <Text style={styles.jurisdictionLaw}>Common Law</Text>
@@ -641,7 +637,7 @@ function SummaryContent({ analysis, jurisdictionCode, onJurisdictionEdit, hideJu
 
 export default function DetailsScreen({ navigation, route }) {
   const { t } = useTranslation();
-  const { colors } = useTheme();
+  const { colors, isDarkMode } = useTheme();
   const { analysis, setAnalysis } = useAnalysis();
   const { profile } = useProfile();
   const analysisId = route.params?.analysisId;
@@ -683,37 +679,45 @@ export default function DetailsScreen({ navigation, route }) {
   const criticalCount = redFlags.filter((r) => r.type === 'critical').length;
   const warningCount = redFlags.filter((r) => r.type === 'warning').length;
 
-  const isIOS = Platform.OS === 'ios';
   const menuActions = React.useMemo(
     () => [
       {
         id: 'share',
         title: t('details.share'),
-        ...(isIOS && { image: 'square.and.arrow.up', imageColor: '#000000' }),
+        image: Platform.select({ ios: 'square.and.arrow.up', android: 'ic_menu_share' }),
+        imageColor: Platform.select({ ios: colors.primaryText, android: colors.primaryText }),
       },
       {
         id: 'export',
         title: t('details.exportPdf'),
-        ...(isIOS && { image: 'square.and.arrow.down', imageColor: '#000000' }),
+        image: Platform.select({ ios: 'square.and.arrow.down', android: 'ic_menu_save' }),
+        imageColor: Platform.select({ ios: colors.primaryText, android: colors.primaryText }),
       },
       {
         id: 'compare',
         title: t('details.compare'),
-        ...(isIOS && { image: 'doc.on.doc', imageColor: '#000000' }),
+        image: Platform.select({ ios: 'doc.on.doc', android: 'ic_menu_agenda' }),
+        imageColor: Platform.select({ ios: colors.primaryText, android: colors.primaryText }),
       },
       {
         id: 'delete',
         title: t('details.delete'),
         attributes: { destructive: true },
-        ...(isIOS && { image: 'trash', imageColor: '#ff3b30' }),
+        image: Platform.select({ ios: 'trash', android: 'ic_menu_delete' }),
+        imageColor: Platform.select({ ios: '#ff3b30', android: '#ff3b30' }),
       },
     ],
-    [t, isIOS]
+    [t, colors.primaryText]
   );
 
-  const handleMenuAction = ({ nativeEvent }) => {
+  const handleConfirmDelete = () => {
+    navigation.goBack();
+  };
+
+  const menuActionRef = useRef(() => {});
+  menuActionRef.current = (eventId) => {
     const currentAnalysis = analysisRef.current;
-    if (nativeEvent.event === 'delete') {
+    if (eventId === 'delete') {
       Alert.alert(
         t('details.deleteTitle'),
         t('details.deleteMessage'),
@@ -723,22 +727,22 @@ export default function DetailsScreen({ navigation, route }) {
         ]
       );
     }
-    if (nativeEvent.event === 'share' || nativeEvent.event === 'export') {
-      const isShare = nativeEvent.event === 'share';
+    if (eventId === 'share' || eventId === 'export') {
+      const isShare = eventId === 'share';
       const dialogTitle = isShare ? t('details.share') : t('details.exportPdf');
       exportAnalysisToPdf(currentAnalysis, { dialogTitle }).catch((e) =>
         Alert.alert(t('details.exportFailed'), e?.message || t('details.couldNotCreatePdf'))
       );
     }
-    if (nativeEvent.event === 'compare') {
-      const title = currentAnalysis?.title || currentAnalysis?.documentType || 'Document';
+    if (eventId === 'compare') {
+      const docTitle = currentAnalysis?.title || currentAnalysis?.documentType || 'Document';
       const text_content = currentAnalysis?.text_content ?? '';
-      navigation.navigate('CompareDocs', { text_content, title });
+      navigation.navigate('CompareDocs', { text_content, title: docTitle });
     }
   };
 
-  const handleConfirmDelete = () => {
-    navigation.goBack();
+  const handleMenuAction = ({ nativeEvent }) => {
+    menuActionRef.current(nativeEvent.event);
   };
 
   const handleTabPress = (index) => {
@@ -805,16 +809,17 @@ export default function DetailsScreen({ navigation, route }) {
       headerStyle: { backgroundColor: colors.primaryBackground },
       headerTitleStyle: { fontSize: 20, fontWeight: Platform.OS === 'android' ? '800' : '600', marginTop: 4, color: colors.primaryText },
       headerTintColor: colors.primaryText,
+      // Резерв места под кнопку; сама кнопка рендерится overlay’ем ниже — так она не растягивается App Bar (как на Upload File).
       headerRight: () => (
-        <MenuView
-          onPressAction={handleMenuAction}
-          actions={menuActions}
-        >
-          <NativeHeaderButtonMenuIcon />
-        </MenuView>
+        <View style={styles.menuButtonWrap}>
+          <MenuView onPressAction={handleMenuAction} actions={menuActions} themeVariant={isDarkMode ? 'dark' : 'light'} style={styles.menuButtonWrap}>
+            <NativeHeaderButtonEllipsis iconSize={24} />
+          </MenuView>
+        </View>
       ),
+      headerRightContainerStyle: { width: 44, height: 44, maxWidth: 44, maxHeight: 44, flexGrow: 0, flexShrink: 0 },
     });
-  }, [navigation, menuActions, colors]);
+  }, [navigation, menuActions, colors, isDarkMode]);
 
   const filteredIssues =
     activeFilter === 'all'
@@ -832,8 +837,6 @@ export default function DetailsScreen({ navigation, route }) {
 
   return (
     <View style={styles.container}>
-
-      {/* One vertical scroll: summary card → sticky tab bar → tab content */}
       <ScrollView
         style={styles.mainScroll}
         contentContainerStyle={styles.mainScrollContent}
@@ -970,6 +973,16 @@ function createStyles(colors) {
     flex: 1,
     backgroundColor: colors.primaryBackground,
   },
+  menuButtonWrap: {
+    width: 44,
+    height: 44,
+    minWidth: 44,
+    minHeight: 44,
+    maxWidth: 44,
+    maxHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   loadingContainer: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -992,7 +1005,7 @@ function createStyles(colors) {
     backgroundColor: colors.primaryBackground,
     paddingTop: 0,
     paddingBottom: 8,
-    gap: spacing.sm,
+    gap: 16,
   },
   tabContent: {
     paddingBottom: spacing.md,
@@ -1075,44 +1088,40 @@ function createStyles(colors) {
     color: colors.secondaryText,
     lineHeight: 20,
   },
-  /* Segmented control */
-  segmentedControl: {
+  /* Segmented control (iOS-style: height 42, radius 12/9, draggable indicator) */
+  segmentContainer: {
     flexDirection: 'row',
-    backgroundColor: colors.tertiary,
-    borderRadius: 16,
+    height: SEGMENT_HEIGHT,
+    borderRadius: SEGMENT_RADIUS,
     padding: SEGMENT_PADDING,
+    marginTop: 0,
+    marginBottom: 0,
     marginHorizontal: spacing.md,
+    backgroundColor: colors.tertiary,
   },
-  segmentPill: {
+  segmentIndicator: {
     position: 'absolute',
-    left: SEGMENT_PADDING,
     top: SEGMENT_PADDING,
+    left: SEGMENT_PADDING,
     bottom: SEGMENT_PADDING,
     backgroundColor: colors.secondaryBackground,
-    borderRadius: 12,
+    borderRadius: INDICATOR_RADIUS,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 4,
     elevation: 2,
   },
-  segmentTab: {
+  segmentButton: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 6,
-    borderRadius: 12,
     zIndex: 1,
   },
-  segmentTabText: {
+  segmentText: {
     fontFamily,
     fontSize: 14,
-    fontWeight: '500',
-    color: colors.secondaryText,
-  },
-  segmentTabTextActive: {
-    color: colors.primaryText,
+    lineHeight: 22,
   },
   /* Red Flags filter chips */
   filtersScrollWrap: {
@@ -1174,7 +1183,7 @@ function createStyles(colors) {
     paddingBottom: spacing.xxl,
   },
   cardList: {
-    gap: 20,
+    gap: 16,
   },
   /* Summary tab styles */
   sCard: {
@@ -1328,19 +1337,6 @@ function createStyles(colors) {
     borderColor: colors.tertiary,
     padding: spacing.md,
     gap: 12,
-  },
-  jurisdictionFlag: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#eff6ff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  jurisdictionFlagImg: {
-    width: 32,
-    height: 32,
   },
   jurisdictionInfo: {
     flex: 1,

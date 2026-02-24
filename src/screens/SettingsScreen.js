@@ -23,6 +23,7 @@ import {
   Check,
   UserRound,
   Globe,
+  Landmark,
   Moon,
   FileText,
   Lightbulb,
@@ -35,6 +36,7 @@ import { useAuth } from '../context/AuthContext';
 import { useProfile } from '../context/ProfileContext';
 import { useSubscription } from '../context/SubscriptionContext';
 import { openLanguageSettings } from '../openLanguageSettings';
+import { JURISDICTION_CODES } from '../lib/jurisdictions';
 
 function SettingsRow({
   icon,
@@ -50,7 +52,7 @@ function SettingsRow({
   const s = rowStyles || {};
   return (
     <TouchableOpacity style={[s.rowCard, compact && s.rowCardCompact]} onPress={onPress} activeOpacity={0.8}>
-      <View style={[s.rowLeftIcon, danger && s.rowLeftIconDanger]}>{icon}</View>
+      {icon != null && <View style={[s.rowLeftIcon, danger && s.rowLeftIconDanger]}>{icon}</View>}
       <View style={s.rowTextCol}>
         <Text style={[s.rowTitle, danger && s.rowTitleDanger]}>{title}</Text>
         {!!subtitle && <Text style={s.rowSubtitle}>{subtitle}</Text>}
@@ -59,16 +61,6 @@ function SettingsRow({
     </TouchableOpacity>
   );
 }
-
-const JURISDICTION_CODES = ['US', 'RU', 'DE', 'KR', 'ES', 'PT'];
-const JURISDICTION_FLAGS = {
-  US: require('../../assets/flag-us.png'),
-  RU: require('../../assets/flag-ru.png'),
-  DE: require('../../assets/flag-de.png'),
-  KR: require('../../assets/flag-kr.png'),
-  ES: require('../../assets/flag-es.png'),
-  PT: require('../../assets/flag-pt.png'),
-};
 
 export default function SettingsScreen({ navigation }) {
   const { t } = useTranslation();
@@ -174,13 +166,7 @@ export default function SettingsScreen({ navigation }) {
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>{t('settings.jurisdiction')}</Text>
           <SettingsRow
-            icon={
-              <Image
-                source={JURISDICTION_FLAGS[profile?.jurisdiction_code] || require('../../assets/flag-us.png')}
-                style={styles.flagIcon}
-                resizeMode="cover"
-              />
-            }
+            icon={<Landmark size={24} color={colors.primary} strokeWidth={2} />}
             title={profile?.jurisdiction_code && JURISDICTION_CODES.includes(profile.jurisdiction_code) ? t('jurisdictions.country' + profile.jurisdiction_code) : t('jurisdictions.countryUS')}
             subtitle={t('settings.jurisdictionSubtitle')}
             rowStyles={styles}
