@@ -47,6 +47,21 @@
 
 ---
 
+## 3.1. Режим **per_user** с повтором «через день» (recurrence)
+
+Если у оффера задано **`recurrence_hidden_seco`** (секунды скрытия после окончания окна), карточка оффера ведёт себя так:
+
+- **Показ:** 24 часа (`duration_seco = 86400`), таймер до `expires_at`.
+- **Скрытие:** после `expires_at` карточка исчезает на время **`recurrence_hidden_seco`** (например 86400 = 1 день).
+- **Повтор:** когда наступило `next_show_at` (в **`user_offer_states`**), приложение вызывает RPC **`start_next_offer_window`** и получает новое окно: `expires_at` и `next_show_at` обновляются, карточка снова показывается на 24 часа.
+
+**Пример в БД:**
+
+- `mode = 'per_user'`, `duration_seco = 86400`, **`recurrence_hidden_seco = 86400`** (24 ч показ, 24 ч скрыто, затем снова показ).
+- В **`user_offer_states`** триггер при создании записи выставляет `expires_at` и **`next_show_at`** = `expires_at + recurrence_hidden_seco`.
+
+---
+
 ## 4. Где в коде считается обратный отсчёт
 
 - **Функция:** `computeCountdown(expiresAt)` в **`HomeScreen.js`**.
@@ -71,6 +86,6 @@
 | Режим     | Где хранится конец времени      | Как задаётся |
 |----------|---------------------------------|--------------|
 | **global**  | `subscription_offers.ends_at`   | Вручную в БД (дата/время окончания оффера). |
-| **per_user**| `user_offer_states.expires_at`  | Триггер при создании записи: `now() + subscription_offers.duration_seco` (секунды). |
+| **per_user**| `user_offer_states.expires_at`  | Триггер при создании записи: `now() + subscription_offers.duration_seco` (секунды). При наличии `recurrence_hidden_seco` следующее окно — через RPC `start_next_offer_window`. |
 
-Таймер Limited Offer всегда показывает время до этой даты (часы : минуты : секунды) и обновляется в реальном времени.
+Таймер Limited Offer всегда показывает время до этой даты (часы : минуты : секунды) и обновляется в реальном времени. Для оффера «через день» карточка скрыта, пока `now()` не достигнет `next_show_at` и приложение не обновит окно через RPC.

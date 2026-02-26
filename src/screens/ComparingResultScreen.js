@@ -11,18 +11,18 @@ import {
   ScrollView,
   TouchableOpacity,
 } from 'react-native';
-import { CommonActions } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { FileText, ArrowRight } from 'lucide-react-native';
 import { fontFamily, spacing, useTheme } from '../theme';
-import { NativeHeaderButtonBack } from '../components/NativeHeaderButton';
 import { maybeRequestReview } from '../lib/requestReview';
+
+const SUMMARY_TRUNCATE_LEN = 200;
 
 function getTypeConfig(colors) {
   return {
-    removed: { labelKey: 'comparingResult.removed', color: colors.error, bg: '#fef2f2' },
-    changed: { labelKey: 'comparingResult.changed', color: colors.warning, bg: '#fffbeb' },
-    added: { labelKey: 'comparingResult.added', color: colors.success, bg: '#f1fbeb' },
+    removed: { labelKey: 'comparingResult.removed', color: colors.error, bg: colors.accent3 },
+    changed: { labelKey: 'comparingResult.changed', color: colors.warning, bg: colors.accent4 },
+    added: { labelKey: 'comparingResult.added', color: colors.success, bg: colors.accent2 },
   };
 }
 
@@ -80,6 +80,7 @@ export default function ComparingResultScreen({ navigation, route }) {
   const document2Name = route.params?.document2Name || '';
 
   const [activeFilter, setActiveFilter] = useState('all');
+  const [summaryShowMore, setSummaryShowMore] = useState(false);
 
   useEffect(() => {
     if (!result) return;
@@ -120,20 +121,6 @@ export default function ComparingResultScreen({ navigation, route }) {
     }
   }, [result, navigation]);
 
-  React.useLayoutEffect(() => {
-    navigation.setOptions({
-      headerBackVisible: false,
-      headerStyle: { backgroundColor: colors.primaryBackground },
-      headerTitleStyle: { color: colors.primaryText },
-      headerTintColor: colors.primaryText,
-      headerLeft: () => (
-        <NativeHeaderButtonBack
-          onPress={() => navigation.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'Home' }] }))}
-        />
-      ),
-    });
-  }, [navigation, colors]);
-
   if (!result) return null;
 
   const summary = result.summary || '';
@@ -147,11 +134,6 @@ export default function ComparingResultScreen({ navigation, route }) {
         stickyHeaderIndices={[1]}
       >
         <View style={styles.topSection}>
-          {summary ? (
-            <View style={styles.summaryCard}>
-              <Text style={styles.summaryText}>{summary}</Text>
-            </View>
-          ) : null}
           <View style={styles.docsRow}>
             <View style={styles.docCard}>
               <View style={styles.docIconWrap}>
@@ -171,6 +153,28 @@ export default function ComparingResultScreen({ navigation, route }) {
               </Text>
             </View>
           </View>
+          {summary ? (() => {
+            const needsTruncate = summary.length > SUMMARY_TRUNCATE_LEN;
+            const displaySummary = needsTruncate && !summaryShowMore
+              ? summary.slice(0, SUMMARY_TRUNCATE_LEN) + '...'
+              : summary;
+            return (
+              <View style={styles.summaryCard}>
+                <Text style={styles.summaryCardTitle}>{t('analysis.summaryTitle')}</Text>
+                <Text style={styles.summaryCardBody}>
+                  {displaySummary}
+                  {needsTruncate && (
+                    <>
+                      {' '}
+                      <Text style={styles.showMoreLink} onPress={() => setSummaryShowMore(!summaryShowMore)}>
+                        {summaryShowMore ? t('analysis.showLess') : t('analysis.showMore')}
+                      </Text>
+                    </>
+                  )}
+                </Text>
+              </View>
+            );
+          })() : null}
         </View>
 
         <View style={styles.filtersSticky}>
@@ -227,11 +231,13 @@ function createStyles(colors) {
   return {
     container: { flex: 1, backgroundColor: colors.primaryBackground },
     topSection: { paddingHorizontal: spacing.md, paddingTop: 12, paddingBottom: 16, backgroundColor: colors.primaryBackground },
-    summaryCard: { backgroundColor: colors.secondaryBackground, borderRadius: 16, padding: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.tertiary },
-    summaryText: { fontFamily, fontSize: 15, fontWeight: '400', color: colors.primaryText, lineHeight: 22 },
-    docsRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-    docCard: { flex: 1, backgroundColor: colors.accent1, borderWidth: 1, borderColor: colors.tertiary, borderRadius: 16, paddingHorizontal: spacing.md, paddingVertical: 12, alignItems: 'center', gap: 12 },
-    docIconWrap: { backgroundColor: colors.accent1, borderRadius: 10, padding: 8 },
+    summaryCard: { backgroundColor: colors.secondaryBackground, borderRadius: 20, borderWidth: 1, borderColor: colors.tertiary, padding: spacing.md, gap: 12, marginTop: spacing.md, marginBottom: 0 },
+    summaryCardTitle: { fontFamily, fontSize: 20, fontWeight: '600', color: colors.primaryText, lineHeight: 24 },
+    summaryCardBody: { fontFamily, fontSize: 16, fontWeight: '400', color: colors.secondaryText, lineHeight: 24 },
+    showMoreLink: { fontFamily, fontSize: 16, fontWeight: '500', color: colors.primary, lineHeight: 24 },
+    docsRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 0 },
+    docCard: { flex: 1, backgroundColor: colors.secondaryBackground, borderWidth: 1, borderColor: colors.tertiary, borderRadius: 20, paddingHorizontal: spacing.md, paddingVertical: 12, alignItems: 'center', gap: 12 },
+    docIconWrap: { backgroundColor: colors.secondaryBackground, borderRadius: 10, padding: 8 },
     docName: { fontFamily, fontSize: 14, fontWeight: '400', color: colors.primaryText, textAlign: 'center', lineHeight: 20 },
     filtersSticky: { backgroundColor: colors.primaryBackground, paddingBottom: 12 },
     filtersScroll: {},
@@ -246,20 +252,20 @@ function createStyles(colors) {
     filterCountTextActive: { color: '#ffffff' },
     scroll: { flex: 1, minHeight: 0 },
     scrollContent: { paddingBottom: spacing.xxl },
-    diffList: { gap: 8, paddingHorizontal: spacing.md, paddingTop: 8 },
+    diffList: { gap: 16, paddingHorizontal: spacing.md, paddingTop: 8 },
     emptyText: { fontFamily, fontSize: 15, color: colors.secondaryText, textAlign: 'center', paddingVertical: spacing.xl },
     diffCard: { backgroundColor: colors.secondaryBackground, borderRadius: 20, borderWidth: 1, borderColor: colors.tertiary, padding: spacing.md, gap: 8 },
-    diffTitle: { fontFamily, fontSize: 15, fontWeight: '600', color: colors.primaryText, marginBottom: 4 },
+    diffTitle: { fontFamily, fontSize: 20, fontWeight: '600', color: colors.primaryText, lineHeight: 24, marginBottom: 4 },
     diffText: { fontFamily, fontSize: 16, fontWeight: '400', color: colors.primaryText, lineHeight: 24 },
     diffTextStrike: { textDecorationLine: 'line-through', textDecorationStyle: 'solid' },
     diffTextStrikeGrey: { color: colors.secondaryText },
     diffTextBold: { fontWeight: '500' },
-    significance: { fontFamily, fontSize: 13, fontWeight: '400', color: colors.secondaryText, fontStyle: 'italic', marginTop: 4 },
+    significance: { fontFamily, fontSize: 16, fontWeight: '400', color: colors.secondaryText, lineHeight: 24, marginTop: 4 },
     diffTags: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-    typeBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8, paddingVertical: 6, borderRadius: 8 },
+    typeBadge: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 8, height: 32, borderRadius: 8 },
     typeDot: { width: 8, height: 8, borderRadius: 4 },
-    typeBadgeText: { fontFamily, fontSize: 12, fontWeight: '500' },
-    sectionBadge: { backgroundColor: colors.primaryBackground, paddingHorizontal: 8, paddingVertical: 6, borderRadius: 8 },
-    sectionBadgeText: { fontFamily, fontSize: 12, fontWeight: '500', color: colors.secondaryText },
+    typeBadgeText: { fontFamily, fontSize: 14, fontWeight: '500' },
+    sectionBadge: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.alternate, paddingHorizontal: 8, height: 32, borderRadius: 8 },
+    sectionBadgeText: { fontFamily, fontSize: 14, fontWeight: '500', color: colors.secondaryText, lineHeight: 20 },
   };
 }

@@ -64,7 +64,7 @@ export default function EditProfileScreen({ navigation }) {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.8,
+      quality: 0.7,
     });
     if (result.canceled) return;
     setPendingAvatarUri(result.assets[0].uri);
@@ -89,7 +89,15 @@ export default function EditProfileScreen({ navigation }) {
         age: ageNum,
       };
       if (pendingAvatarUri) {
-        updates.avatar_url = await uploadAvatar(user.id, pendingAvatarUri);
+        let avatarUrl;
+        try {
+          avatarUrl = await uploadAvatar(user.id, pendingAvatarUri);
+        } catch (uploadErr) {
+          Alert.alert(t('common.error'), uploadErr?.message || t('editProfile.errorSaveFailed'));
+          setSaving(false);
+          return;
+        }
+        updates.avatar_url = avatarUrl + (avatarUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
         setPendingAvatarUri(null);
       }
       await updateProfile(user.id, updates);

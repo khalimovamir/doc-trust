@@ -5,15 +5,37 @@
 import { supabase } from './supabase';
 
 /**
+ * Find existing chat for this document analysis (from Details)
+ * @param {string} userId
+ * @param {string} analysisId - public.analyses.id
+ * @returns {Promise<{ id, title, context_type, context_title, context_data }|null>}
+ */
+export async function getChatByAnalysisId(userId, analysisId) {
+  if (!userId || !analysisId) return null;
+  const { data, error } = await supabase
+    .from('chats')
+    .select('id, title, context_type, context_title, context_data')
+    .eq('user_id', userId)
+    .eq('analysis_id', analysisId)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/**
  * Create a new chat
  * @param {string} userId
  * @param {string} [title]
  * @param {Object} [context] - { context_type, context_title, context_data }
+ * @param {string} [analysisId] - link to document analysis (public.analyses.id)
  */
-export async function createChat(userId, title = 'New chat', context = null) {
+export async function createChat(userId, title = 'New chat', context = null, analysisId = null) {
   const row = {
     user_id: userId,
     title: (title || 'New chat').slice(0, 100),
+    ...(analysisId && { analysis_id: analysisId }),
     ...(context && {
       context_type: context.context_type || null,
       context_title: context.context_title ? context.context_title.slice(0, 200) : null,
@@ -26,12 +48,12 @@ export async function createChat(userId, title = 'New chat', context = null) {
 }
 
 /**
- * Get user's chats, most recent first
+ * Get user's chats, most recent first (with context for restoring when opening)
  */
 export async function getChats(userId) {
   const { data, error } = await supabase
     .from('chats')
-    .select('id, title, created_at, updated_at')
+    .select('id, title, context_type, context_title, context_data, created_at, updated_at')
     .eq('user_id', userId)
     .order('updated_at', { ascending: false })
     .limit(50);
@@ -73,11 +95,26 @@ export async function getMostRecentChat(userId) {
 export async function getChatMessages(chatId) {
   const { data, error } = await supabase
     .from('chat_messages')
-    .select('id, role, content, created_at, context_ref, feedback, image_url')
+    .select('id, role, content, created_at, image_url')
     .eq('chat_id', chatId)
     .order('created_at', { ascending: true });
   if (error) throw error;
   return data || [];
+}
+
+/**
+ * Get last message of a chat (for list preview)
+ */
+export async function getChatLastMessage(chatId) {
+  const { data, error } = await supabase
+    .from('chat_messages')
+    .select('content, created_at')
+    .eq('chat_id', chatId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
 }
 
 const CHAT_IMAGES_BUCKET = 'chat-images';
@@ -117,29 +154,13 @@ export async function uploadChatImage(userId, chatId, localUri) {
 }
 
 /**
- * Update feedback (like/dislike) for an assistant message.
- * @param {string} messageId - chat_messages.id
- * @param {'like'|'dislike'|null} feedback
- */
-export async function updateMessageFeedback(messageId, feedback) {
-  const { error } = await supabase
-    .from('chat_messages')
-    .update({ feedback: feedback || null })
-    .eq('id', messageId)
-    .in('role', ['assistant']);
-  if (error) throw error;
-}
-
-/**
  * Add a message to a chat
- * @param {string} [contextText] - context text shown in the message (from the context card); only text, no id
  * @param {string} [imageUrl] - public URL of image uploaded to chat-images bucket
  */
-export async function addChatMessage(chatId, role, content, contextText = null, imageUrl = null) {
+export async function addChatMessage(chatId, role, content, _contextText = null, imageUrl = null) {
   const row = { chat_id: chatId, role, content };
-  if (contextText) row.context_ref = String(contextText);
   if (imageUrl) row.image_url = imageUrl;
-  const { data, error } = await supabase.from('chat_messages').insert(row).select('id, created_at, context_ref, image_url').single();
+  const { data, error } = await supabase.from('chat_messages').insert(row).select('id, created_at, image_url').single();
   if (error) throw error;
   return data;
 }

@@ -1,8 +1,7 @@
 /**
- * AI Lawyer - Analysis Result (post-analysis, not yet saved)
- * Shown right after AnalyzingScreen. Save or open chat writes to Supabase.
- * Menu: Export PDF only. Guidance: no checkboxes. Bottom: Save + round Ask AI (56) with logo.
- * Changing Jurisdiction re-runs analysis.
+ * AI Lawyer - Analysis Result (post-analysis)
+ * Before save: Save button only; Jurisdiction visible; Guidance no checkboxes; menu Export only.
+ * After save: same as Details — Ask AI Lawyer button, no Jurisdiction, Guidance with checkboxes, full menu.
  */
 
 import React, { useState, useRef, useLayoutEffect, useCallback, useMemo } from 'react';
@@ -12,7 +11,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Image,
   Alert,
   Platform,
 } from 'react-native';
@@ -27,7 +25,7 @@ import { useAnalysis } from '../context/AnalysisContext';
 import { useAILawyerChat } from '../context/AILawyerChatContext';
 import { analyzeDocument } from '../lib/ai';
 import { getAppLanguageCode } from '../i18n';
-import { saveDocumentWithAnalysis } from '../lib/documents';
+import { saveDocumentWithAnalysis, updateGuidanceItemDone } from '../lib/documents';
 import { exportAnalysisToPdf } from '../lib/exportPdf';
 import { maybeRequestReview } from '../lib/requestReview';
 import { useTranslation } from 'react-i18next';
@@ -46,6 +44,7 @@ import {
   getSeverityConfig,
   getIssueTypeConfig,
 } from './DetailsScreen';
+import { Sparkles } from 'lucide-react-native';
 
 export default function AnalysisResultScreen({ navigation, route }) {
   const { t } = useTranslation();
@@ -61,22 +60,26 @@ export default function AnalysisResultScreen({ navigation, route }) {
   const severityConfig = useMemo(() => getSeverityConfig(colors), [colors]);
   const issueTypeConfig = useMemo(() => getIssueTypeConfig(colors), [colors]);
   const localStyles = useMemo(() => StyleSheet.create(createLocalStyles(colors)), [colors]);
-  const menuActions = React.useMemo(
-    () => [
-      {
-        id: 'export',
-        title: t('details.exportPdf'),
-        image: Platform.select({ ios: 'square.and.arrow.down', android: 'ic_menu_save' }),
-        imageColor: Platform.select({ ios: colors.primaryText, android: colors.primaryText }),
-      },
-    ],
-    [t, colors.primaryText]
-  );
-
   const [activeTab, setActiveTab] = useState(0);
   const [activeFilter, setActiveFilter] = useState('all');
   const [saving, setSaving] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
   const [reAnalyzing, setReAnalyzing] = useState(false);
+
+  const menuActions = React.useMemo(
+    () =>
+      isSaved
+        ? [
+            { id: 'share', title: t('details.share'), image: Platform.select({ ios: 'square.and.arrow.up', android: 'ic_menu_share' }), imageColor: Platform.select({ ios: colors.primaryText, android: colors.primaryText }) },
+            { id: 'export', title: t('details.exportPdf'), image: Platform.select({ ios: 'square.and.arrow.down', android: 'ic_menu_save' }), imageColor: Platform.select({ ios: colors.primaryText, android: colors.primaryText }) },
+            { id: 'compare', title: t('details.compare'), image: Platform.select({ ios: 'doc.on.doc', android: 'ic_menu_agenda' }), imageColor: Platform.select({ ios: colors.primaryText, android: colors.primaryText }) },
+            { id: 'delete', title: t('details.delete'), attributes: { destructive: true }, image: Platform.select({ ios: 'trash', android: 'ic_menu_delete' }), imageColor: Platform.select({ ios: '#ff3b30', android: '#ff3b30' }) },
+          ]
+        : [
+            { id: 'export', title: t('details.exportPdf'), image: Platform.select({ ios: 'square.and.arrow.down', android: 'ic_menu_save' }), imageColor: Platform.select({ ios: colors.primaryText, android: colors.primaryText }) },
+          ],
+    [t, colors.primaryText, isSaved]
+  );
   const lastJurisdictionRef = useRef(profile?.jurisdiction_code);
   const fromJurisdictionRef = useRef(false);
   const analysisRef = useRef(analysis);
@@ -112,19 +115,32 @@ export default function AnalysisResultScreen({ navigation, route }) {
     }
     setSaving(true);
     try {
-      await saveToSupabase();
-      navigation.getParent()?.dispatch(
-        require('@react-navigation/native').CommonActions.reset({
-          index: 0,
-          routes: [{ name: 'Home' }],
-        })
-      );
+      const saved = await saveToSupabase();
+      if (saved) {
+        setAnalysis(saved);
+        setIsSaved(true);
+      }
     } catch (e) {
       Alert.alert(t('details.saveFailed'), e?.message || t('details.couldNotSave'));
     } finally {
       setSaving(false);
     }
-  }, [user?.id, saveToSupabase, navigation]);
+  }, [user?.id, saveToSupabase, setAnalysis]);
+
+  const handleGuidanceToggle = useCallback(
+    async (itemId, isDone) => {
+      try {
+        await updateGuidanceItemDone(itemId, isDone);
+        setAnalysis((prev) => {
+          if (!prev) return prev;
+          const next = { ...prev };
+          next.guidance = (next.guidance || []).map((g) => (g.id === itemId ? { ...g, is_done: isDone } : g));
+          return next;
+        });
+      } catch (_) {}
+    },
+    [setAnalysis]
+  );
 
   const handleAskAI = useCallback(
     (issueItem) => {
@@ -164,9 +180,9 @@ export default function AnalysisResultScreen({ navigation, route }) {
         };
         openChat('', context);
       }
-      navigation.navigate('Chat');
+      navigation.navigate(isSaved ? 'AILawyer' : 'Chat');
     },
-    [analysis, openChat, navigation, title]
+    [analysis, openChat, navigation, title, isSaved]
   );
 
   const exportPdfRef = useRef(() => {});
@@ -176,9 +192,33 @@ export default function AnalysisResultScreen({ navigation, route }) {
       Alert.alert(t('details.exportFailed'), e?.message || t('details.couldNotCreatePdf'))
     );
   };
-  const handleMenuAction = useCallback(({ nativeEvent }) => {
-    if (nativeEvent.event === 'export') exportPdfRef.current();
-  }, []);
+  const handleMenuAction = useCallback(
+    ({ nativeEvent }) => {
+      const eventId = nativeEvent.event;
+      if (eventId === 'export' || eventId === 'share') {
+        const isShare = eventId === 'share';
+        const dialogTitle = isShare ? t('details.share') : t('details.exportPdf');
+        exportAnalysisToPdf(analysisRef.current, { dialogTitle }).catch((e) =>
+          Alert.alert(t('details.exportFailed'), e?.message || t('details.couldNotCreatePdf'))
+        );
+        return;
+      }
+      if (eventId === 'compare') {
+        const current = analysisRef.current;
+        const docTitle = current?.documentType || current?.title || 'Document';
+        const text_content = current?.text_content ?? documentText ?? '';
+        navigation.navigate('CompareDocs', { text_content, title: docTitle });
+        return;
+      }
+      if (eventId === 'delete') {
+        Alert.alert(t('details.deleteTitle'), t('details.deleteMessage'), [
+          { text: t('common.cancel'), style: 'cancel' },
+          { text: t('details.deleteConfirm'), style: 'destructive', onPress: () => navigation.goBack() },
+        ]);
+      }
+    },
+    [t, navigation, documentText]
+  );
 
   const onJurisdictionEdit = useCallback(() => {
     fromJurisdictionRef.current = true;
@@ -188,6 +228,7 @@ export default function AnalysisResultScreen({ navigation, route }) {
 
   useFocusEffect(
     useCallback(() => {
+      if (isSaved) return;
       if (!fromJurisdictionRef.current || !documentText) return;
       fromJurisdictionRef.current = false;
       const newCode = profile?.jurisdiction_code || 'US';
@@ -198,7 +239,7 @@ export default function AnalysisResultScreen({ navigation, route }) {
         .then((result) => setAnalysis({ ...result, text_content: documentText }))
         .catch(() => {})
         .finally(() => setReAnalyzing(false));
-    }, [documentText, profile?.jurisdiction_code, setAnalysis])
+    }, [documentText, profile?.jurisdiction_code, setAnalysis, isSaved])
   );
 
   useLayoutEffect(() => {
@@ -308,7 +349,7 @@ export default function AnalysisResultScreen({ navigation, route }) {
                 analysis={analysis}
                 jurisdictionCode={profile?.jurisdiction_code || 'US'}
                 onJurisdictionEdit={onJurisdictionEdit}
-                hideJurisdiction={false}
+                hideJurisdiction={isSaved}
                 styles={styles}
               />
             </View>
@@ -316,41 +357,53 @@ export default function AnalysisResultScreen({ navigation, route }) {
           {activeTab === 1 && (
             <View style={[styles.scrollContent, styles.cardList]}>
               {filteredIssues.map((item) => (
-                <IssueCard key={item.id} item={item} onAskAi={() => handleAskAI(item)} styles={styles} issueTypeConfig={issueTypeConfig} colors={colors} />
+                <IssueCard
+                  key={item.id}
+                  item={item}
+                  onAskAi={() => handleAskAI(item)}
+                  askAiLabel={isSaved ? t('details.askAi') : undefined}
+                  copyTextLabel={isSaved ? t('details.copyText') : undefined}
+                  styles={styles}
+                  issueTypeConfig={issueTypeConfig}
+                  colors={colors}
+                />
               ))}
             </View>
           )}
           {activeTab === 2 && (
             <View style={[styles.scrollContent, styles.cardList]}>
               {guidance.map((item) => (
-                <GuidanceCard key={item.id} item={item} showCheckbox={false} styles={styles} severityConfig={severityConfig} colors={colors} />
+                <GuidanceCard
+                  key={item.id}
+                  item={item}
+                  onToggleDone={isSaved ? handleGuidanceToggle : undefined}
+                  showCheckbox={isSaved}
+                  styles={styles}
+                  severityConfig={severityConfig}
+                  colors={colors}
+                />
               ))}
             </View>
           )}
         </View>
       </ScrollView>
 
-      <View style={localStyles.bottomRow}>
-        <TouchableOpacity
-          style={localStyles.saveButton}
-          activeOpacity={0.85}
-          onPress={handleSave}
-          disabled={saving}
-        >
-          <Text style={localStyles.saveButtonText}>{saving ? 'Saving...' : 'Save'}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={localStyles.askRoundButton}
-          activeOpacity={0.85}
-          onPress={() => handleAskAI()}
-          disabled={saving}
-        >
-          <Image
-            source={require('../../assets/ai-lawyer-logo.png')}
-            style={localStyles.askRoundLogo}
-            resizeMode="contain"
-          />
-        </TouchableOpacity>
+      <View style={isSaved ? styles.bottomAction : localStyles.bottomRow}>
+        {isSaved ? (
+          <TouchableOpacity style={styles.askButton} activeOpacity={0.85} onPress={() => handleAskAI()}>
+            <Sparkles size={20} color="#ffffff" strokeWidth={2} />
+            <Text style={styles.askButtonText}>{t('common.askAiLawyer')}</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={localStyles.saveButton}
+            activeOpacity={0.85}
+            onPress={handleSave}
+            disabled={saving}
+          >
+            <Text style={localStyles.saveButtonText}>{saving ? 'Saving...' : 'Save'}</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -358,7 +411,7 @@ export default function AnalysisResultScreen({ navigation, route }) {
 
 function createLocalStyles(colors) {
   return {
-    reAnalyzingWrap: { paddingHorizontal: spacing.md, paddingTop: 8, alignItems: 'center' },
+    reAnalyzingWrap: { paddingHorizontal: spacing.md, paddingTop: 8, paddingBottom: spacing.xl, alignItems: 'center' },
     reAnalyzingText: { fontFamily, fontSize: 16, color: colors.secondaryText },
     bottomRow: {
       flexDirection: 'row',
@@ -384,20 +437,6 @@ function createLocalStyles(colors) {
       fontSize: 16,
       fontWeight: '500',
       color: '#ffffff',
-    },
-    askRoundButton: {
-      width: 56,
-      height: 56,
-      borderRadius: 28,
-      backgroundColor: colors.primary,
-      alignItems: 'center',
-      justifyContent: 'center',
-      overflow: 'hidden',
-      padding: 0,
-    },
-    askRoundLogo: {
-      width: 56,
-      height: 56,
     },
   };
 }

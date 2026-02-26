@@ -1,0 +1,17 @@
+
+patch-package 8.0.1
+Applying patches...
+@callstack/liquid-glass@0.7.0 ✔
+@react-native-menu/menu@2.0.0 ✔
+@react-navign/native@8.0.0-alpha.11 ✔
+
+added 1136 packages, and audited 1137 packages in 1m
+
+112 packages are looking for funding
+  run `npm fund` for details
+
+9 vulnerabilities (2 moderate, 5 high, 2 critical)
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+

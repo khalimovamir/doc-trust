@@ -1,324 +1,419 @@
 /**
- * AI Lawyer - AI Agent Screen
- * Shows Start Chat when no active chat, shows chat UI when chat is active
+ * AI Lawyer - Tab screen: empty state or chat list.
+ * Empty state: icon, title, description, Start Chat, quick prompts.
+ * With chats: list of chats (title, date, last message), Add new chat button.
  */
 
-import React, { useEffect, useRef, useMemo } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Image,
   Platform,
-  Animated,
+  TouchableOpacity,
+  ScrollView,
   Alert,
+  ActivityIndicator,
+  Image,
 } from 'react-native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { MessageCircleQuestion } from 'lucide-react-native';
 import { MenuView } from '@react-native-menu/menu';
-import { NativeHeaderButtonBack, NativeHeaderButtonEllipsis } from '../components/NativeHeaderButton';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
-import { fontFamily, spacing, borderRadius, useTheme } from '../theme';
-import { useAILawyerTab } from '../context/AILawyerTabContext';
-import { useAILawyerChat } from '../context/AILawyerChatContext';
+import { Plus, MessageCircleQuestion, MoreVertical } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
-import { createChat, addChatMessage, getMostRecentChat } from '../lib/chat';
-import ChatView, { ASSISTANT_GREETING } from '../components/ChatView';
+import { useAILawyerChat } from '../context/AILawyerChatContext';
+import { useTheme, fontFamily, spacing, borderRadius, typography } from '../theme';
+import {
+  getChats,
+  getChatLastMessage,
+  createChat,
+  addChatMessage,
+  deleteChat,
+} from '../lib/chat';
+import { ASSISTANT_GREETING } from '../components/ChatView';
+import { SkeletonChatCard } from '../components/Skeleton';
+import { formatChatCardTime } from '../lib/dateFormat';
 
-const QUICK_PROMPT_KEYS = ['aiLawyer.prompt1', 'aiLawyer.prompt2', 'aiLawyer.prompt3', 'aiLawyer.prompt4'];
-
-const menuButtonWrapStyle = {
-  width: 44,
-  height: 44,
-  minWidth: 44,
-  minHeight: 44,
-  maxWidth: 44,
-  maxHeight: 44,
-  justifyContent: 'center',
-  alignItems: 'center',
-};
-
-/* ── Main screen ── */
-
-export default function AILawyerScreen({ navigation }) {
+export default function AILawyerScreen() {
   const { t } = useTranslation();
-  const { colors, isDarkMode } = useTheme();
-  const insets = useSafeAreaInsets();
-  const tabBarHeight = useBottomTabBarHeight();
-  const paddingBottom = Math.max(0, Number(tabBarHeight) || 0);
-  const { setInChat, lastVisitedTabRef } = useAILawyerTab();
-  const startStyles = useMemo(() => StyleSheet.create(createStartStyles(colors)), [colors]);
-  const chatStyles = useMemo(
-    () =>
-      StyleSheet.create({
-        container: { flex: 1, backgroundColor: colors.secondaryBackground },
-        headerBar: {
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          paddingHorizontal: 8,
-          paddingBottom: 12,
-          backgroundColor: colors.secondaryBackground,
-          borderBottomWidth: StyleSheet.hairlineWidth,
-          borderBottomColor: colors.tertiary,
-        },
-        headerTitle: {
-          fontFamily,
-          fontSize: 20,
-          fontWeight: Platform.OS === 'android' ? '800' : '600',
-          color: colors.primaryText,
-        },
-      }),
-    [colors]
-  );
-  const chatMenuActions = useMemo(
-    () => [
-      {
-        id: 'clear',
-        title: t('aiLawyer.clearChat'),
-        attributes: { destructive: true },
-        ...(Platform.OS === 'ios' && { image: 'trash', imageColor: '#ff3b30' }),
-      },
-    ],
-    [t]
-  );
-  const quickPrompts = QUICK_PROMPT_KEYS.map((key) => t(key));
+  const { colors } = useTheme();
+  const navigation = useNavigation();
   const { user } = useAuth();
-  const {
-    hasChat,
-    setHasChat,
-    chatPrompt,
-    chatContext,
-    setChatPrompt,
-    setCurrentChatId,
-    currentChatId,
-    setRefreshChatTrigger,
-  } = useAILawyerChat();
-  const chatFadeAnim = useRef(new Animated.Value(0)).current;
+  const { setCurrentChatId, setChatContext, setRefreshChatTrigger } = useAILawyerChat();
 
-  // Читаем ref в момент нажатия — он обновлён при фокусе на Home/History/Settings
-  const goBack = React.useCallback(() => {
-    const tab = lastVisitedTabRef?.current || 'HomeTab';
-    navigation.navigate(tab);
-  }, [navigation, lastVisitedTabRef]);
+  const [chats, setChats] = useState([]);
+  const [lastMessages, setLastMessages] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
 
-  useEffect(() => {
-    setInChat(hasChat || !!currentChatId);
-  }, [hasChat, currentChatId, setInChat]);
-
-  useEffect(() => {
-    if (hasChat || currentChatId) {
-      chatFadeAnim.setValue(0);
-      Animated.timing(chatFadeAnim, {
-        toValue: 1,
-        duration: 280,
-        useNativeDriver: false,
-      }).start();
-    }
-  }, [hasChat, currentChatId]);
-
-  // When opening AI Lawyer tab: if user has chats in Supabase but no active chat in state, open the most recent
-  useFocusEffect(
-    React.useCallback(() => {
-      if (!user?.id || hasChat || currentChatId) return;
-      getMostRecentChat(user.id)
-        .then((chat) => {
-          if (chat?.id) {
-            setCurrentChatId(chat.id);
-            setHasChat(true);
-          }
-        })
-        .catch(() => {});
-    }, [user?.id, hasChat, currentChatId, setCurrentChatId, setHasChat])
-  );
-
-  const handleStartChat = async (prompt = '') => {
-    if (prompt) {
-      setChatPrompt(prompt);
-      setHasChat(true);
+  const fetchChats = useCallback(async () => {
+    if (!user?.id) {
+      setChats([]);
+      setLoading(false);
       return;
     }
-    if (!user?.id) return;
+    setLoading(true);
+    try {
+      const list = await getChats(user.id);
+      setChats(list);
+      const last = {};
+      await Promise.all(
+        list.map(async (c) => {
+          const msg = await getChatLastMessage(c.id);
+          if (msg) last[c.id] = msg;
+        })
+      );
+      setLastMessages(last);
+    } catch (_) {
+      setChats([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchChats();
+    }, [fetchChats])
+  );
+
+  const openChatScreen = () => {
+    const root = navigation.getParent?.()?.getParent?.() ?? navigation.getParent?.();
+    if (root?.navigate) root.navigate('Chat');
+  };
+
+  const handleStartChat = async () => {
+    if (!user?.id || creating) return;
+    setCreating(true);
     try {
       const created = await createChat(user.id, 'New chat', null);
       await addChatMessage(created.id, 'assistant', ASSISTANT_GREETING);
       setCurrentChatId(created.id);
-      setHasChat(true);
-    } catch (_) {}
-  };
-
-  const currentChatIdRef = React.useRef(currentChatId);
-  currentChatIdRef.current = currentChatId;
-
-  const handleClearChat = React.useCallback(async () => {
-    const chatId = currentChatIdRef.current;
-    if (!chatId) return;
-    try {
-      const { deleteMessagesExceptFirst } = await import('../lib/chat');
-      await deleteMessagesExceptFirst(chatId);
+      setChatContext(null);
       setRefreshChatTrigger((p) => p + 1);
+      openChatScreen();
     } catch (_) {}
-  }, [setRefreshChatTrigger]);
-
-  const handleMenuAction = ({ nativeEvent }) => {
-    const chatId = currentChatIdRef.current;
-    if (nativeEvent.event === 'clear' && chatId) {
-      Alert.alert(
-        t('aiLawyer.clearChatTitle'),
-        t('aiLawyer.clearChatMessage'),
-        [
-          { text: t('common.cancel'), style: 'cancel' },
-          { text: t('aiLawyer.clearChatConfirm'), style: 'destructive', onPress: handleClearChat },
-        ]
-      );
-    }
+    setCreating(false);
   };
 
-  // Не показываем App Bar на родительском стеке — только своя шапка внутри экрана чата,
-  // чтобы на главных табах (Home, History, Settings) не было заголовка с кнопкой назад.
+  const handleAddNewChat = () => {
+    handleStartChat();
+  };
 
-  if (hasChat || currentChatId) {
+  const handleOpenChat = (chat) => {
+    setCurrentChatId(chat.id);
+    setChatContext(null);
+    setRefreshChatTrigger((p) => p + 1);
+    openChatScreen();
+  };
+
+  const handleDeleteChat = (chatId, chatTitle) => {
+    Alert.alert(
+      t('aiLawyer.deleteChatTitle'),
+      t('aiLawyer.deleteChatMessage'),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('aiLawyer.deleteChatConfirm'),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteChat(chatId);
+              setChats((prev) => prev.filter((c) => c.id !== chatId));
+              const next = { ...lastMessages };
+              delete next[chatId];
+              setLastMessages(next);
+            } catch (_) {}
+          },
+        },
+      ]
+    );
+  };
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        container: { flex: 1, backgroundColor: colors.primaryBackground },
+        appBar: {
+          paddingHorizontal: spacing.md,
+          paddingTop: spacing.md,
+          paddingBottom: spacing.sm,
+          backgroundColor: colors.primaryBackground,
+        },
+        headerTitle: {
+          fontFamily,
+          fontSize: 24,
+          fontWeight: Platform.OS === 'android' ? '800' : '700',
+          color: colors.primaryText,
+        },
+        content: { flex: 1, paddingHorizontal: spacing.md },
+        contentEmpty: { flex: 1, paddingHorizontal: 16 },
+        emptyCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 32 },
+        emptyTopBlock: { alignItems: 'center', marginBottom: 16 },
+        emptyLogo: { width: 88, height: 88, marginBottom: spacing.lg },
+        emptyTitle: {
+          fontFamily,
+          fontSize: 22,
+          fontWeight: '700',
+          color: colors.primaryText,
+          marginBottom: spacing.sm,
+          textAlign: 'center',
+        },
+        emptySubtitle: {
+          fontFamily,
+          fontSize: 15,
+          color: colors.secondaryText,
+          textAlign: 'center',
+          lineHeight: 22,
+          paddingHorizontal: spacing.lg,
+        },
+        emptyActionsWrap: { width: '100%', marginBottom: spacing.xl },
+        startChatBtn: {
+          height: 48,
+          backgroundColor: colors.accent1,
+          borderWidth: 1,
+          borderColor: colors.primary,
+          borderRadius: 16,
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginHorizontal: 16,
+          marginBottom: 32,
+        },
+        startChatBtnText: {
+          fontFamily,
+          fontSize: 16,
+          fontWeight: '600',
+          color: colors.primary,
+        },
+        quickPromptsTitle: {
+          fontFamily,
+          fontSize: 16,
+          fontWeight: '500',
+          color: colors.primaryText,
+          marginBottom: spacing.sm,
+          textAlign: 'left',
+        },
+        promptCard: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          height: 52,
+          backgroundColor: colors.alternate,
+          borderWidth: 1,
+          borderColor: colors.tertiary,
+          borderRadius: 16,
+          paddingHorizontal: spacing.md,
+          marginBottom: spacing.sm,
+        },
+        promptIcon: { marginRight: spacing.sm },
+        promptText: { fontFamily, fontSize: 15, color: colors.primaryText, flex: 1 },
+        chatListWrap: { flex: 1 },
+        listContent: { paddingTop: spacing.sm, paddingBottom: 24 },
+        chatCard: {
+          width: '100%',
+          backgroundColor: colors.secondaryBackground,
+          borderRadius: 20,
+          borderWidth: 1,
+          borderColor: colors.tertiary,
+          paddingLeft: 16,
+          paddingTop: 18,
+          paddingRight: 14,
+          paddingBottom: 18,
+          marginBottom: spacing.sm,
+        },
+        chatCardRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+        chatCardCol: { flex: 1, alignItems: 'flex-start' },
+        chatCardTitle: {
+          ...typography.titleMedium,
+          fontSize: 18,
+          color: colors.primaryText,
+          flex: 1,
+        },
+        chatCardMenuIcon: { marginTop: 2 },
+        chatCardTime: {
+          ...typography.labelSmall,
+          fontSize: 14,
+          fontWeight: '400',
+          color: colors.secondaryText,
+          marginTop: 10,
+        },
+        chatCardPreview: {
+          ...typography.bodyLarge,
+          color: colors.secondaryText,
+          marginTop: 10,
+        },
+        addChatBtnWrap: {
+          paddingHorizontal: spacing.md,
+          paddingTop: spacing.md,
+          paddingBottom: 100,
+        },
+        addChatBtn: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: 56,
+          backgroundColor: colors.primary,
+          borderRadius: 28,
+          gap: 8,
+        },
+        addChatBtnText: { fontFamily, fontSize: 16, fontWeight: '600', color: '#ffffff' },
+        loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+        menuButtonWrap: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center' },
+      }),
+    [colors]
+  );
+
+  if (loading) {
     return (
-      <Animated.View
-        style={[
-          chatStyles.container,
-          { paddingBottom },
-          { opacity: chatFadeAnim },
-        ]}
-      >
-        <View style={[chatStyles.headerBar, { paddingTop: insets.top }]}>
-          <NativeHeaderButtonBack onPress={goBack} />
-          <Text style={chatStyles.headerTitle}>{t('tabs.aiLawyer')}</Text>
-          <View style={menuButtonWrapStyle}>
-            <MenuView onPressAction={handleMenuAction} actions={chatMenuActions} themeVariant={isDarkMode ? 'dark' : 'light'} style={menuButtonWrapStyle}>
-              <NativeHeaderButtonEllipsis />
-            </MenuView>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.appBar}>
+          <Text style={styles.headerTitle}>{t('screens.aiLawyer')}</Text>
+        </View>
+        <View style={styles.chatListWrap}>
+          <ScrollView
+            style={styles.content}
+            contentContainerStyle={[styles.listContent, { paddingBottom: 24 + 56 + spacing.md + 100 }]}
+            showsVerticalScrollIndicator={false}
+          >
+            {[1, 2, 3].map((key) => (
+              <SkeletonChatCard key={key} />
+            ))}
+          </ScrollView>
+          <View style={styles.addChatBtnWrap}>
+            <TouchableOpacity
+              style={styles.addChatBtn}
+              onPress={handleAddNewChat}
+              disabled
+              activeOpacity={0.8}
+            >
+              <Plus size={22} color="#ffffff" strokeWidth={2.5} />
+              <Text style={styles.addChatBtnText}>{t('aiLawyer.addNewChat')}</Text>
+            </TouchableOpacity>
           </View>
         </View>
-        <ChatView chatPrompt={chatPrompt} chatContext={chatContext} />
-      </Animated.View>
+      </SafeAreaView>
     );
   }
 
-  return (
-    <SafeAreaView style={[startStyles.container, { paddingBottom }]} edges={['top']}>
-      <ScrollView
-        style={startStyles.scroll}
-        contentContainerStyle={startStyles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={startStyles.heroSection}>
-          <Image
-            source={require('../../assets/ai-lawyer-logo.png')}
-            style={startStyles.avatar}
-            resizeMode="contain"
-          />
-          <Text style={startStyles.title}>{t('aiLawyer.expertTitle')}</Text>
-          <Text style={startStyles.subtitle}>
-            {t('aiLawyer.expertSubtitle')}
-          </Text>
-          <TouchableOpacity
-            style={startStyles.startButton}
-            activeOpacity={0.8}
-            onPress={() => handleStartChat('')}
-          >
-            <Text style={startStyles.startButtonText}>{t('aiLawyer.startChat')}</Text>
-          </TouchableOpacity>
-        </View>
+  const hasChats = chats.length > 0;
 
-        <View style={startStyles.promptsSection}>
-          <Text style={startStyles.promptsTitle}>{t('aiLawyer.quickPrompts')}</Text>
-          <View style={startStyles.promptsList}>
-            {quickPrompts.map((prompt, index) => (
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {hasChats ? (
+        <View style={styles.appBar}>
+          <Text style={styles.headerTitle}>{t('screens.aiLawyer')}</Text>
+        </View>
+      ) : null}
+
+      {!hasChats ? (
+        <ScrollView style={[styles.content, styles.contentEmpty]} contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
+          <View style={styles.emptyCenter}>
+            <View style={styles.emptyTopBlock}>
+              <Image
+                source={require('../../assets/ai-lawyer-logo.png')}
+                style={styles.emptyLogo}
+                resizeMode="contain"
+              />
+              <Text style={styles.emptyTitle}>{t('aiLawyer.expertTitle')}</Text>
+              <Text style={styles.emptySubtitle}>{t('aiLawyer.expertSubtitle')}</Text>
+            </View>
+            <View style={styles.emptyActionsWrap}>
               <TouchableOpacity
-                key={index}
-                style={startStyles.promptCard}
+                style={styles.startChatBtn}
+                onPress={handleStartChat}
+                disabled={creating}
                 activeOpacity={0.8}
-                onPress={() => handleStartChat(prompt)}
               >
-                <MessageCircleQuestion size={24} color={colors.secondaryText} strokeWidth={2} />
-                <Text style={startStyles.promptText}>{prompt}</Text>
+                {creating ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Text style={styles.startChatBtnText}>{t('aiLawyer.startChat')}</Text>
+                )}
               </TouchableOpacity>
-            ))}
+              <Text style={styles.quickPromptsTitle}>{t('aiLawyer.quickPrompts')}</Text>
+              {[1, 2, 3, 4].map((i) => (
+                <TouchableOpacity
+                  key={i}
+                  style={styles.promptCard}
+                  onPress={handleStartChat}
+                  disabled={creating}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.promptIcon}>
+                    <MessageCircleQuestion size={20} color={colors.secondaryText} strokeWidth={2} />
+                  </View>
+                  <Text style={styles.promptText}>{t(`aiLawyer.prompt${i}`)}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </ScrollView>
+      ) : (
+        <View style={styles.chatListWrap}>
+          <ScrollView
+            style={styles.content}
+            contentContainerStyle={[styles.listContent, { paddingBottom: 24 + 56 + spacing.md + 100 }]}
+            showsVerticalScrollIndicator={false}
+          >
+            {chats.map((chat) => {
+            const last = lastMessages[chat.id];
+            const preview = last?.content?.slice(0, 80) || '';
+            const menuActions = [
+              {
+                id: 'delete',
+                title: t('aiLawyer.deleteChat'),
+                attributes: { destructive: true },
+                ...(Platform.OS === 'ios' && { image: 'trash', imageColor: '#ff3b30' }),
+              },
+            ];
+            return (
+              <View key={chat.id} style={styles.chatCard}>
+                <View style={styles.chatCardRow}>
+                  <TouchableOpacity
+                    style={styles.chatCardCol}
+                    onPress={() => handleOpenChat(chat)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.chatCardTitle} numberOfLines={1} ellipsizeMode="tail">
+                      {chat.title || 'Chat'}
+                    </Text>
+                    <Text style={styles.chatCardTime}>{formatChatCardTime(chat.updated_at)}</Text>
+                    {preview ? (
+                      <Text style={styles.chatCardPreview} numberOfLines={2} ellipsizeMode="tail">
+                        {preview}
+                        {last?.content?.length > 80 ? '…' : ''}
+                      </Text>
+                    ) : null}
+                  </TouchableOpacity>
+                  <MenuView
+                    onPressAction={({ nativeEvent }) => {
+                      if (nativeEvent.event === 'delete') handleDeleteChat(chat.id, chat.title);
+                    }}
+                    actions={menuActions}
+                    themeVariant={colors.primaryText === '#ffffff' ? 'dark' : 'light'}
+                  >
+                    <TouchableOpacity style={styles.chatCardMenuIcon} hitSlop={8}>
+                      <MoreVertical size={24} color={colors.primaryText} strokeWidth={2} />
+                    </TouchableOpacity>
+                  </MenuView>
+                </View>
+              </View>
+            );
+          })}
+          </ScrollView>
+          <View style={styles.addChatBtnWrap}>
+            <TouchableOpacity
+              style={styles.addChatBtn}
+              onPress={handleAddNewChat}
+              disabled={creating}
+              activeOpacity={0.8}
+            >
+              <Plus size={22} color="#ffffff" strokeWidth={2.5} />
+              <Text style={styles.addChatBtnText}>{t('aiLawyer.addNewChat')}</Text>
+            </TouchableOpacity>
           </View>
         </View>
-      </ScrollView>
+      )}
     </SafeAreaView>
   );
-}
-
-/* ── Styles: Start Chat view (theme-aware) ── */
-
-function createStartStyles(colors) {
-  return {
-    container: { flex: 1, backgroundColor: colors.secondaryBackground },
-    scroll: { flex: 1 },
-    scrollContent: { paddingTop: 56, paddingBottom: spacing.xl },
-    heroSection: {
-      alignItems: 'center',
-      paddingHorizontal: spacing.xl,
-      marginBottom: spacing.md,
-    },
-    avatar: { width: 80, height: 80, marginBottom: spacing.xl },
-    title: {
-      fontFamily,
-      fontSize: 24,
-      fontWeight: '500',
-      color: colors.primaryText,
-      textAlign: 'center',
-      marginBottom: spacing.sm,
-    },
-    subtitle: {
-      fontFamily,
-      fontSize: 14,
-      fontWeight: '400',
-      lineHeight: 20,
-      color: colors.secondaryText,
-      textAlign: 'center',
-      marginBottom: spacing.md,
-    },
-    startButton: {
-      width: '100%',
-      height: 48,
-      borderRadius: borderRadius.xl,
-      backgroundColor: colors.accent1,
-      borderWidth: 1,
-      borderColor: colors.tertiary,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    startButtonText: { fontFamily, fontSize: 16, fontWeight: '500', color: colors.primary },
-    promptsSection: { paddingHorizontal: spacing.md, paddingTop: spacing.md },
-    promptsTitle: {
-      fontFamily,
-      fontSize: 16,
-      fontWeight: '500',
-      color: colors.primaryText,
-      marginBottom: spacing.sm,
-    },
-    promptsList: { gap: spacing.xs },
-    promptCard: {
-      height: 52,
-      borderRadius: borderRadius.xl,
-      backgroundColor: colors.alternate,
-      borderWidth: 1,
-      borderColor: colors.tertiary,
-      paddingHorizontal: 14,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing.xs,
-    },
-    promptText: {
-      flex: 1,
-      fontFamily,
-      fontSize: 14,
-      fontWeight: '400',
-      color: colors.secondaryText,
-    },
-  };
 }

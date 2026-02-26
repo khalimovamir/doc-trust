@@ -33,11 +33,14 @@ import Svg, { Circle as SvgCircle } from 'react-native-svg';
 
 import { fontFamily, spacing, useTheme } from '../theme';
 import { SkeletonDetails } from '../components/Skeleton';
+import { useAuth } from '../context/AuthContext';
 import { useAILawyerChat } from '../context/AILawyerChatContext';
 import { useAnalysis } from '../context/AnalysisContext';
 import { useProfile } from '../context/ProfileContext';
 import { useTranslation } from 'react-i18next';
-import { getAnalysisByIdCached, updateGuidanceItemDone } from '../lib/documents';
+import { getAnalysisByIdCached, updateGuidanceItemDone, deleteAnalysisWithRelated } from '../lib/documents';
+import { createChat, addChatMessage, getChatByAnalysisId } from '../lib/chat';
+import { getDocumentChatInitial } from '../lib/chatGreeting';
 import { formatDateShort, formatDateLocalized } from '../lib/dateFormat';
 import { exportAnalysisToPdf } from '../lib/exportPdf';
 
@@ -302,6 +305,30 @@ function getIssueTypeConfig(colors) {
       Icon: Lightbulb,
     },
   };
+}
+
+function RedFlagsEmpty({ styles, colors, t }) {
+  return (
+    <View style={styles.redFlagsEmptyWrap}>
+      <View style={styles.redFlagsEmptyIconCard}>
+        <AlertTriangle size={28} color={colors.primary} strokeWidth={1.5} />
+      </View>
+      <Text style={styles.redFlagsEmptyTitle}>{t('details.redFlagsEmptyTitle')}</Text>
+      <Text style={styles.redFlagsEmptyDescription}>{t('details.redFlagsEmptyDescription')}</Text>
+    </View>
+  );
+}
+
+function GuidanceEmpty({ styles, colors, t }) {
+  return (
+    <View style={styles.guidanceEmptyWrap}>
+      <View style={styles.guidanceEmptyIconCard}>
+        <Lightbulb size={28} color={colors.primary} strokeWidth={1.5} />
+      </View>
+      <Text style={styles.guidanceEmptyTitle}>{t('details.guidanceEmptyTitle')}</Text>
+      <Text style={styles.guidanceEmptyDescription}>{t('details.guidanceEmptyDescription')}</Text>
+    </View>
+  );
 }
 
 /* ── Guidance data ── */
@@ -713,8 +740,19 @@ export default function DetailsScreen({ navigation, route }) {
     [t, colors.primaryText]
   );
 
-  const handleConfirmDelete = () => {
-    navigation.goBack();
+  const handleConfirmDelete = async () => {
+    const id = analysisId || analysisRef.current?.id;
+    if (!id) {
+      navigation.goBack();
+      return;
+    }
+    try {
+      await deleteAnalysisWithRelated(id);
+      setAnalysis(null);
+      navigation.goBack();
+    } catch (e) {
+      Alert.alert(t('common.error'), e?.message || t('details.deleteFailed'));
+    }
   };
 
   const menuActionRef = useRef(() => {});
@@ -766,11 +804,16 @@ export default function DetailsScreen({ navigation, route }) {
     } catch (_) {}
   };
 
-  const { openChat } = useAILawyerChat();
-  const handleAskAI = (issueItem) => {
+  const { user } = useAuth();
+  const { setCurrentChatId, setChatContext, setRefreshChatTrigger } = useAILawyerChat();
+
+  const handleAskAI = async (issueItem) => {
+    if (!user?.id) return;
+    const docInitial = getDocumentChatInitial(analysis, issueItem ?? null, t);
+    let context;
     if (issueItem) {
       const copyText = [issueItem.title, '', 'Why this matters:', issueItem.whyMatters || '', '', 'What to do:', issueItem.whatToDo || ''].filter(Boolean).join('\n');
-      const context = {
+      context = {
         source: 'details',
         type: 'issue',
         title: `${issueItem.section || 'Document'} — ${issueItem.title}`,
@@ -781,15 +824,17 @@ export default function DetailsScreen({ navigation, route }) {
           summary: analysis?.summary,
           documentType: analysis?.documentType,
           redFlags: analysis?.redFlags,
+          contextText: copyText,
+          initial_message: docInitial.initial_message,
+          initial_suggestions: docInitial.initial_suggestions,
         },
         contextText: copyText,
       };
-      openChat('', context);
     } else {
       const docTitle = analysis?.documentType || title || 'Document Analysis';
       const summary = analysis?.summary || '';
       const contextText = summary ? `${docTitle}\n\n${summary.slice(0, 300)}${summary.length > 300 ? '...' : ''}` : docTitle;
-      const context = {
+      context = {
         source: 'details',
         type: 'document',
         title: docTitle,
@@ -799,12 +844,35 @@ export default function DetailsScreen({ navigation, route }) {
           documentType: analysis?.documentType,
           redFlags: analysis?.redFlags,
           analysisId: analysis?.id,
+          contextText,
+          initial_message: docInitial.initial_message,
+          initial_suggestions: docInitial.initial_suggestions,
         },
         contextText,
       };
-      openChat('', context);
     }
-    navigation.navigate('Chat');
+    try {
+      const analysisIdForChat = analysis?.id ?? null;
+      const existing = analysisIdForChat ? await getChatByAnalysisId(user.id, analysisIdForChat) : null;
+      if (existing) {
+        setCurrentChatId(existing.id);
+        setChatContext(context);
+        setRefreshChatTrigger((p) => p + 1);
+        navigation.navigate('Chat');
+        return;
+      }
+      const chatContextForDb = {
+        context_type: context.type,
+        context_title: context.title,
+        context_data: context.data ?? context,
+      };
+      const created = await createChat(user.id, context.title, chatContextForDb, analysisIdForChat);
+      await addChatMessage(created.id, 'assistant', docInitial.initial_message);
+      setCurrentChatId(created.id);
+      setChatContext(context);
+      setRefreshChatTrigger((p) => p + 1);
+      navigation.navigate('Chat');
+    } catch (_) {}
   };
 
   useLayoutEffect(() => {
@@ -934,26 +1002,38 @@ export default function DetailsScreen({ navigation, route }) {
             </View>
           )}
           {activeTab === 1 && (
-            <View style={[styles.scrollContent, styles.cardList]}>
-              {filteredIssues.map((item) => (
-                <IssueCard
-                  key={item.id}
-                  item={item}
-                  onAskAi={() => handleAskAI(item)}
-                  askAiLabel={t('details.askAi')}
-                  copyTextLabel={t('details.copyText')}
-                  styles={styles}
-                  issueTypeConfig={issueTypeConfig}
-                  colors={colors}
-                />
-              ))}
+            <View style={[styles.scrollContent, filteredIssues.length === 0 && styles.scrollContentRedFlagsEmpty]}>
+              {filteredIssues.length === 0 ? (
+                <RedFlagsEmpty styles={styles} colors={colors} t={t} />
+              ) : (
+                <View style={styles.cardList}>
+                  {filteredIssues.map((item) => (
+                    <IssueCard
+                      key={item.id}
+                      item={item}
+                      onAskAi={() => handleAskAI(item)}
+                      askAiLabel={t('details.askAi')}
+                      copyTextLabel={t('details.copyText')}
+                      styles={styles}
+                      issueTypeConfig={issueTypeConfig}
+                      colors={colors}
+                    />
+                  ))}
+                </View>
+              )}
             </View>
           )}
           {activeTab === 2 && (
-            <View style={[styles.scrollContent, styles.cardList]}>
-              {guidance.map((item) => (
-                <GuidanceCard key={item.id} item={item} onToggleDone={handleGuidanceToggle} showCheckbox styles={styles} severityConfig={severityConfig} colors={colors} />
-              ))}
+            <View style={[styles.scrollContent, guidance.length === 0 && styles.scrollContentGuidanceEmpty]}>
+              {guidance.length === 0 ? (
+                <GuidanceEmpty styles={styles} colors={colors} t={t} />
+              ) : (
+                <View style={styles.cardList}>
+                  {guidance.map((item) => (
+                    <GuidanceCard key={item.id} item={item} onToggleDone={handleGuidanceToggle} showCheckbox styles={styles} severityConfig={severityConfig} colors={colors} />
+                  ))}
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -1124,6 +1204,7 @@ function createStyles(colors) {
   segmentText: {
     fontFamily,
     fontSize: 14,
+    fontWeight: '500',
     lineHeight: 22,
   },
   /* Red Flags filter chips */
@@ -1471,6 +1552,86 @@ function createStyles(colors) {
     fontWeight: '500',
     color: colors.secondaryText,
     lineHeight: 20,
+  },
+  /* Red Flags empty state */
+  scrollContentRedFlagsEmpty: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    minHeight: 200,
+  },
+  redFlagsEmptyWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 48 + 32,
+    paddingBottom: 48,
+    paddingHorizontal: spacing.lg,
+  },
+  redFlagsEmptyIconCard: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: colors.secondaryBackground,
+    borderWidth: 1,
+    borderColor: colors.tertiary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+  },
+  redFlagsEmptyTitle: {
+    fontFamily,
+    fontSize: 20,
+    fontWeight: '600',
+    color: colors.primaryText,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
+  redFlagsEmptyDescription: {
+    fontFamily,
+    fontSize: 16,
+    fontWeight: '400',
+    color: colors.secondaryText,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  /* Guidance empty state */
+  scrollContentGuidanceEmpty: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    minHeight: 200,
+  },
+  guidanceEmptyWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 48 + 32,
+    paddingBottom: 48,
+    paddingHorizontal: spacing.lg,
+  },
+  guidanceEmptyIconCard: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: colors.secondaryBackground,
+    borderWidth: 1,
+    borderColor: colors.tertiary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+  },
+  guidanceEmptyTitle: {
+    fontFamily,
+    fontSize: 20,
+    fontWeight: '600',
+    color: colors.primaryText,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
+  guidanceEmptyDescription: {
+    fontFamily,
+    fontSize: 16,
+    fontWeight: '400',
+    color: colors.secondaryText,
+    textAlign: 'center',
+    lineHeight: 24,
   },
   /* Guidance cards */
   guideCard: {

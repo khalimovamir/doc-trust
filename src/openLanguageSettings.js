@@ -1,27 +1,38 @@
 /**
- * AI Lawyer - Open OS Language & Region settings
- * Android: opens system Language / Locale settings.
- * iOS: tries to open Settings > General > Language & Region.
+ * AI Lawyer - Open app language settings.
+ * Android 13+: "App languages" for this app (ACTION_APP_LOCALE_SETTINGS).
+ * Android <13: system Locale settings, then app settings fallback.
+ * iOS: opens app settings (Settings → Doc Trust). With CFBundleDevelopmentRegion and
+ *      CFBundleLocalizations in app.json, iOS shows "Language" on that screen —
+ *      user taps it to open the app language picker (Suggested / Other languages).
  */
 
 import { Platform, Linking } from 'react-native';
 import * as IntentLauncher from 'expo-intent-launcher';
+import * as Application from 'expo-application';
 
-/** iOS URLs for Settings > General > Language & Region (try multiple schemes) */
-const IOS_LANGUAGE_REGION_URLS = [
-  'App-prefs:root=General&path=INTERNATIONAL',
-  'app-settings:root=General&path=INTERNATIONAL',
-  'prefs:root=General&path=INTERNATIONAL',
-];
+const ANDROID_TIRAMISU = 33;
 
 /**
- * Opens the system Language & Region screen.
- * - Android: opens system Locale / Language settings.
- * - iOS: tries several URL schemes; falls back to app settings if all fail.
- * @returns {Promise<void>}
+ * Opens the app language settings.
+ * - Android 13+: direct "App languages" for this app.
+ * - Android <13: system Locale, then openSettings() fallback.
+ * - iOS: Linking.openSettings() → Settings → Doc Trust → user taps "Language".
  */
 export async function openLanguageSettings() {
   if (Platform.OS === 'android') {
+    if (Platform.Version >= ANDROID_TIRAMISU) {
+      try {
+        const applicationId = Application.applicationId;
+        if (applicationId) {
+          await IntentLauncher.startActivityAsync(
+            IntentLauncher.ActivityAction.APP_LOCALE_SETTINGS,
+            { data: `package:${applicationId}` }
+          );
+          return;
+        }
+      } catch (_) {}
+    }
     try {
       await IntentLauncher.startActivityAsync(
         IntentLauncher.ActivityAction.LOCALE_SETTINGS
@@ -35,15 +46,8 @@ export async function openLanguageSettings() {
     return;
   }
   if (Platform.OS === 'ios') {
-    for (const url of IOS_LANGUAGE_REGION_URLS) {
-      try {
-        await Linking.openURL(url);
-        return;
-      } catch (_) {}
-    }
     try {
       await Linking.openSettings();
     } catch (_) {}
-    return;
   }
 }

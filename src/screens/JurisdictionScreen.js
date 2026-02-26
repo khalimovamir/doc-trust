@@ -72,6 +72,7 @@ export default function JurisdictionScreen({ navigation }) {
     try {
       await updateProfile(user.id, { jurisdiction_code: id });
       await refreshProfile();
+      navigation.goBack();
     } catch (e) {
       Alert.alert('Error', e?.message || 'Could not save jurisdiction.');
     } finally {

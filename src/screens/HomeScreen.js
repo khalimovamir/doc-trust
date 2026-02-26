@@ -20,6 +20,8 @@ import {
   PanResponder,
   Dimensions,
   Platform,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -28,20 +30,22 @@ import {
   Files,
   ArrowRight,
   X,
+  FileText,
 } from 'lucide-react-native';
 import {
   IconRosetteDiscountCheckFilled,
   IconCircleXFilled,
 } from '@tabler/icons-react-native';
 import { fontFamily, spacing, borderRadius, useTheme } from '../theme';
-import { useAILawyerTab } from '../context/AILawyerTabContext';
 import { useAuth } from '../context/AuthContext';
 import { useSubscription } from '../context/SubscriptionContext';
-import { dismissUserOffer } from '../lib/subscription';
+import { dismissUserOffer, startNextOfferWindow } from '../lib/subscription';
 import { getAnalysesForUserWithCache } from '../lib/documents';
 import { ScoreRing, detailsCreateStyles } from './DetailsScreen';
+import { SkeletonCard, SkeletonOfferBanner } from '../components/Skeleton';
 
 import { formatDateShort } from '../lib/dateFormat';
+import { getTextFromImageUri } from '../lib/uploadDocument';
 
 function getRiskLabelKey(score) {
   const s = Number(score);
@@ -92,6 +96,18 @@ function formatPrice(cents, currency = 'USD') {
 }
 const OFFER_CLOSE_ROW_HEIGHT = 44;
 
+function RecentScansEmpty({ styles, colors, t }) {
+  return (
+    <View style={styles.recentEmptyWrap}>
+      <View style={styles.recentEmptyIconCard}>
+        <FileText size={28} color={colors.primary} strokeWidth={1.5} />
+      </View>
+      <Text style={styles.recentEmptyTitle}>{t('home.recentScansEmptyTitle')}</Text>
+      <Text style={styles.recentEmptyDescription}>{t('home.recentScansEmptyDescription')}</Text>
+    </View>
+  );
+}
+
 function ScanItemCard({ item, onPress, cardStyles, scoreRingStyles, colors }) {
   const s = cardStyles || {};
   return (
@@ -125,7 +141,6 @@ const OFFER_SHEET_FEATURES = [
 export default function HomeScreen({ navigation }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
-  const { setPreviousTab } = useAILawyerTab();
   const { user } = useAuth();
   const styles = useMemo(() => StyleSheet.create(createStyles(colors)), [colors]);
   const scoreRingStyles = useMemo(() => StyleSheet.create(detailsCreateStyles(colors)), [colors]);
@@ -134,9 +149,12 @@ export default function HomeScreen({ navigation }) {
     offers,
     products,
     ensureOfferState,
+    isLoading: subscriptionLoading,
   } = useSubscription();
 
+  const [scanning, setScanning] = useState(false);
   const [recentScans, setRecentScans] = useState([]);
+  const [recentScansLoading, setRecentScansLoading] = useState(false);
   const [isOfferSheetVisible, setIsOfferSheetVisible] = useState(false);
   const [currentOffer, setCurrentOffer] = useState(null);
   const [userOfferState, setUserOfferState] = useState(null);
@@ -144,41 +162,56 @@ export default function HomeScreen({ navigation }) {
   const sheetTranslateY = useRef(new Animated.Value(Number(SCREEN_HEIGHT) || 800)).current;
 
   const activeOffer = offers?.[0] ?? null;
-  const showBanner = !isPro && !!activeOffer;
-
   const [bannerOfferState, setBannerOfferState] = useState(null);
 
   useEffect(() => {
-    if (!showBanner || activeOffer?.mode !== 'per_user') return;
+    if (!activeOffer || !user?.id || activeOffer?.mode !== 'per_user') return;
     let cancelled = false;
     ensureOfferState(activeOffer.id).then((state) => {
       if (!cancelled) setBannerOfferState(state);
     });
     return () => { cancelled = true; };
-  }, [showBanner, activeOffer?.id, activeOffer?.mode, ensureOfferState]);
+  }, [activeOffer?.id, activeOffer?.mode, user?.id, ensureOfferState]);
+
+  // Recurring offer: when next_show_at is due, start next window (expires_at + recurrence_hidden_seco)
+  useEffect(() => {
+    if (!activeOffer?.recurrence_hidden_seco || activeOffer?.mode !== 'per_user' || !bannerOfferState?.next_show_at) return;
+    const nextAt = new Date(bannerOfferState.next_show_at).getTime();
+    if (Date.now() < nextAt) return;
+    let cancelled = false;
+    startNextOfferWindow(activeOffer.id).then((updated) => {
+      if (!cancelled && updated) setBannerOfferState(updated);
+    });
+    return () => { cancelled = true; };
+  }, [activeOffer?.id, activeOffer?.mode, activeOffer?.recurrence_hidden_seco, bannerOfferState?.next_show_at]);
+
+  const inOfferWindow = activeOffer?.mode === 'global'
+    || (activeOffer?.mode === 'per_user' && (
+      !bannerOfferState
+      || (bannerOfferState.expires_at && new Date(bannerOfferState.expires_at) > new Date())
+    ));
+  const showBanner = !isPro && !!activeOffer && inOfferWindow;
 
   const bannerExpiresAt = activeOffer?.mode === 'global'
     ? activeOffer?.ends_at
     : bannerOfferState?.expires_at;
   const [bannerCountdown, setBannerCountdown] = useState({ h: 0, m: 0, s: 0 });
+  const bannerExpiresAtRef = useRef(bannerExpiresAt);
+  bannerExpiresAtRef.current = bannerExpiresAt;
   useEffect(() => {
-    if (!bannerExpiresAt) return;
-    const tick = () => setBannerCountdown(computeCountdown(bannerExpiresAt));
+    if (!showBanner || !bannerExpiresAt) return;
+    const tick = () => {
+      const at = bannerExpiresAtRef.current;
+      if (at) setBannerCountdown(computeCountdown(at));
+    };
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [bannerExpiresAt]);
+  }, [showBanner, bannerExpiresAt]);
 
   // В bottom sheet оффера всегда эти 4 пункта из переводов (не из Supabase)
   const displayFeatures = OFFER_SHEET_FEATURES;
-
   const getFeatureFreeHas = (f) => f.freeHas === true;
-
-  useFocusEffect(
-    React.useCallback(() => {
-      setPreviousTab('HomeTab');
-    }, [setPreviousTab])
-  );
 
   useEffect(() => {
     const expiresAt = userOfferState?.expires_at ?? currentOffer?.ends_at ?? null;
@@ -209,8 +242,10 @@ export default function HomeScreen({ navigation }) {
   const fetchRecentScans = useCallback(() => {
     if (!user?.id) {
       setRecentScans([]);
+      setRecentScansLoading(false);
       return;
     }
+    setRecentScansLoading(true);
     getAnalysesForUserWithCache(user.id)
       .then((data) => {
         const list = Array.isArray(data) ? data : [];
@@ -229,7 +264,8 @@ export default function HomeScreen({ navigation }) {
         });
         setRecentScans(items);
       })
-      .catch(() => setRecentScans([]));
+      .catch(() => setRecentScans([]))
+      .finally(() => setRecentScansLoading(false));
   }, [user?.id, t]);
 
   useFocusEffect(
@@ -327,9 +363,13 @@ export default function HomeScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
       >
         {/* Scan Document Now */}
-        <TouchableOpacity style={styles.scanArea} onPress={handleScan} activeOpacity={0.8}>
-          <Camera size={32} color={colors.primary} strokeWidth={1.5} />
-          <Text style={styles.scanAreaText}>{t('home.scanNow')}</Text>
+        <TouchableOpacity style={styles.scanArea} onPress={handleScan} activeOpacity={0.8} disabled={scanning}>
+          {scanning ? (
+            <ActivityIndicator size="small" color={colors.primary} style={{ marginRight: spacing.sm }} />
+          ) : (
+            <Camera size={32} color={colors.primary} strokeWidth={1.5} />
+          )}
+          <Text style={styles.scanAreaText}>{scanning ? t('scanner.extracting') : t('home.scanNow')}</Text>
         </TouchableOpacity>
 
         {/* Upload & Compare */}
@@ -351,28 +391,30 @@ export default function HomeScreen({ navigation }) {
         </TouchableOpacity>
 
         {/* Limited Offer Banner */}
-        {showBanner && (
-        <TouchableOpacity style={styles.banner} activeOpacity={0.9} onPress={openOfferSheet}>
-          <View style={styles.bannerContent}>
-            <Text style={styles.bannerTitle}>{activeOffer?.title || t('home.limitedOffer')}</Text>
-            <Text style={styles.bannerDiscount}>{activeOffer?.subtitle || '50% OFF'}</Text>
-            <View style={styles.countdown}>
-              <View style={styles.countdownBox}>
-                <Text style={styles.countdownText}>{formatNum(bannerCountdown.h)}</Text>
-              </View>
-              <Text style={styles.countdownColon}> : </Text>
-              <View style={styles.countdownBox}>
-                <Text style={styles.countdownText}>{formatNum(bannerCountdown.m)}</Text>
-              </View>
-              <Text style={styles.countdownColon}> : </Text>
-              <View style={styles.countdownBox}>
-                <Text style={styles.countdownText}>{formatNum(bannerCountdown.s)}</Text>
+        {!isPro && subscriptionLoading ? (
+          <SkeletonOfferBanner />
+        ) : showBanner ? (
+          <TouchableOpacity style={styles.banner} activeOpacity={0.9} onPress={openOfferSheet}>
+            <View style={styles.bannerContent}>
+              <Text style={styles.bannerTitle}>{activeOffer?.title || t('home.limitedOffer')}</Text>
+              <Text style={styles.bannerDiscount}>{activeOffer?.subtitle || '50% OFF'}</Text>
+              <View style={styles.countdown}>
+                <View style={styles.countdownBox}>
+                  <Text style={styles.countdownText}>{formatNum(bannerCountdown.h)}</Text>
+                </View>
+                <Text style={styles.countdownColon}> : </Text>
+                <View style={styles.countdownBox}>
+                  <Text style={styles.countdownText}>{formatNum(bannerCountdown.m)}</Text>
+                </View>
+                <Text style={styles.countdownColon}> : </Text>
+                <View style={styles.countdownBox}>
+                  <Text style={styles.countdownText}>{formatNum(bannerCountdown.s)}</Text>
+                </View>
               </View>
             </View>
-          </View>
-          <Image source={require('../../assets/offer.png')} style={styles.bannerImage} resizeMode="contain" />
-        </TouchableOpacity>
-        )}
+            <Image source={require('../../assets/offer.png')} style={styles.bannerImage} resizeMode="contain" />
+          </TouchableOpacity>
+        ) : null}
 
         {/* Recent Scans */}
         <View style={styles.section}>
@@ -382,9 +424,19 @@ export default function HomeScreen({ navigation }) {
               <Text style={styles.seeAll}>{t('home.seeAll')}</Text>
             </TouchableOpacity>
           </View>
-          {recentScans.map((item) => (
-            <ScanItemCard key={item.id} item={item} onPress={handleScanPress} cardStyles={styles} scoreRingStyles={scoreRingStyles} colors={colors} />
-          ))}
+          {recentScansLoading && recentScans.length === 0 ? (
+            <View style={styles.recentSkeletonList}>
+              {[1, 2, 3].map((key) => (
+                <SkeletonCard key={key} circleSize={56} lineWidths={['85%', '55%', '35%']} style={styles.recentSkeletonCard} />
+              ))}
+            </View>
+          ) : recentScans.length === 0 ? (
+            <RecentScansEmpty styles={styles} colors={colors} t={t} />
+          ) : (
+            recentScans.map((item) => (
+              <ScanItemCard key={item.id} item={item} onPress={handleScanPress} cardStyles={styles} scoreRingStyles={scoreRingStyles} colors={colors} />
+            ))
+          )}
         </View>
       </ScrollView>
 
@@ -791,6 +843,39 @@ function createStyles(colors) {
       fontWeight: '500',
       color: colors.primary,
     },
+    recentEmptyWrap: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 32,
+      paddingHorizontal: spacing.lg,
+    },
+    recentEmptyIconCard: {
+      width: 68,
+      height: 68,
+      borderRadius: 34,
+      backgroundColor: colors.secondaryBackground,
+      borderWidth: 1,
+      borderColor: colors.tertiary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: spacing.lg,
+    },
+    recentEmptyTitle: {
+      fontFamily,
+      fontSize: 20,
+      fontWeight: '600',
+      color: colors.primaryText,
+      textAlign: 'center',
+      marginBottom: spacing.sm,
+    },
+    recentEmptyDescription: {
+      fontFamily,
+      fontSize: 16,
+      fontWeight: '400',
+      color: colors.secondaryText,
+      textAlign: 'center',
+      lineHeight: 24,
+    },
     scanCard: {
       flexDirection: 'row',
       backgroundColor: colors.secondaryBackground,
@@ -834,6 +919,10 @@ function createStyles(colors) {
       fontSize: 12,
       fontWeight: '400',
       color: colors.secondaryText,
+    },
+    recentSkeletonList: {},
+    recentSkeletonCard: {
+      marginBottom: spacing.sm,
     },
   };
 }

@@ -10,11 +10,6 @@ import { AnalysisProvider } from './src/context/AnalysisContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import { ensureI18n } from './src/i18n';
 import ErrorBoundary from './src/components/ErrorBoundary';
-import { initSentry, wrapRootComponent } from './src/lib/sentry';
-
-try {
-  initSentry();
-} catch (_) {}
 
 function getSupabaseUrl() {
   const v = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -115,4 +110,4 @@ function App() {
   );
 }
 
-export default wrapRootComponent(App);
+export default App;

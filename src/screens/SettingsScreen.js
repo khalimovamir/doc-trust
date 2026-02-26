@@ -5,7 +5,6 @@
 
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -31,11 +30,11 @@ import {
   LogOut,
 } from 'lucide-react-native';
 import { fontFamily, spacing, borderRadius, useTheme } from '../theme';
-import { useAILawyerTab } from '../context/AILawyerTabContext';
 import { useAuth } from '../context/AuthContext';
 import { useProfile } from '../context/ProfileContext';
 import { useSubscription } from '../context/SubscriptionContext';
 import { openLanguageSettings } from '../openLanguageSettings';
+import { requestReviewFromSettings } from '../lib/requestReview';
 import { JURISDICTION_CODES } from '../lib/jurisdictions';
 
 function SettingsRow({
@@ -65,18 +64,11 @@ function SettingsRow({
 export default function SettingsScreen({ navigation }) {
   const { t } = useTranslation();
   const { colors, isDarkMode, setDarkMode } = useTheme();
-  const { setPreviousTab } = useAILawyerTab();
   const { signOut } = useAuth();
   const { profile } = useProfile();
   const { isPro, features } = useSubscription();
 
   const styles = useMemo(() => StyleSheet.create(createStyles(colors)), [colors]);
-
-  useFocusEffect(
-    React.useCallback(() => {
-      setPreviousTab('Settings');
-    }, [setPreviousTab])
-  );
 
   const handleOpenLogoutDialog = () => {
     Alert.alert(
@@ -191,7 +183,7 @@ export default function SettingsScreen({ navigation }) {
             subtitle={t('settings.languageSubtitle')}
             rowStyles={styles}
             colors={colors}
-            onPress={()=> Linking.openSettings()}
+            onPress={() => openLanguageSettings()}
           />
           <SettingsRow
             icon={<Moon size={24} color={colors.primary} strokeWidth={2} />}
@@ -234,7 +226,7 @@ export default function SettingsScreen({ navigation }) {
             subtitle={t('settings.rateTheAppSubtitle')}
             rowStyles={styles}
             colors={colors}
-            onPress={() => {}}
+            onPress={() => requestReviewFromSettings()}
           />
           <SettingsRow
             icon={<LogOut size={22} color={colors.error} strokeWidth={2} />}

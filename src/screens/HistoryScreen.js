@@ -17,10 +17,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { fontFamily, spacing, borderRadius, useTheme } from '../theme';
-import { useAILawyerTab } from '../context/AILawyerTabContext';
 import { useAuth } from '../context/AuthContext';
 import { getAnalysesForUserWithCache } from '../lib/documents';
 import { formatDateShort } from '../lib/dateFormat';
+import { FileText } from 'lucide-react-native';
 import { ScoreRing, detailsCreateStyles } from './DetailsScreen';
 import { SkeletonCard } from '../components/Skeleton';
 
@@ -39,6 +39,17 @@ function getRiskLabelKey(score) {
   return 'home.lowRisk';
 }
 
+function HistoryEmpty({ styles, colors, t }) {
+  return (
+    <View style={styles.emptyWrap}>
+      <View style={styles.emptyIconCard}>
+        <FileText size={28} color={colors.primary} strokeWidth={1.5} />
+      </View>
+      <Text style={styles.emptyTitle}>{t('history.emptyTitle')}</Text>
+      <Text style={styles.emptyDescription}>{t('history.emptyDescription')}</Text>
+    </View>
+  );
+}
 
 function HistoryCard({ item, onPress, cardStyles, scoreRingStyles, colors }) {
   const s = cardStyles || {};
@@ -66,7 +77,6 @@ export default function HistoryScreen({ navigation }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const { user } = useAuth();
-  const { setPreviousTab } = useAILawyerTab();
   const [activeFilter, setActiveFilter] = useState('all');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -103,12 +113,7 @@ export default function HistoryScreen({ navigation }) {
       .finally(() => setLoading(false));
   }, [user?.id, t]);
 
-  useFocusEffect(
-    useCallback(() => {
-      setPreviousTab('History');
-      fetchItems();
-    }, [setPreviousTab, fetchItems])
-  );
+  useFocusEffect(useCallback(() => { fetchItems(); }, [fetchItems]));
 
   const handleCardPress = (item) => {
     navigation.navigate('Details', { analysisId: item.id });
@@ -153,7 +158,10 @@ export default function HistoryScreen({ navigation }) {
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          !loading && filtered.length === 0 && styles.scrollContentEmpty,
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {loading ? (
@@ -162,6 +170,8 @@ export default function HistoryScreen({ navigation }) {
               <SkeletonCard key={key} circleSize={56} lineWidths={['85%', '55%', '35%']} style={styles.skeletonCard} />
             ))}
           </View>
+        ) : filtered.length === 0 ? (
+          <HistoryEmpty styles={styles} colors={colors} t={t} />
         ) : (
           <View style={styles.list}>
             {filtered.map((item) => (
@@ -218,7 +228,22 @@ function createStyles(colors) {
     chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
     chipText: { fontFamily, fontSize: 14, fontWeight: '600', color: colors.primaryText },
     chipTextActive: { color: colors.secondaryBackground },
-    list: { paddingBottom: spacing.xl },
+    scrollContentEmpty: { flexGrow: 1 },
+    emptyWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 48, paddingHorizontal: spacing.lg },
+    emptyIconCard: {
+      width: 68,
+      height: 68,
+      borderRadius: 34,
+      backgroundColor: colors.secondaryBackground,
+      borderWidth: 1,
+      borderColor: colors.tertiary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: spacing.lg,
+    },
+    emptyTitle: { fontFamily, fontSize: 20, fontWeight: '600', color: colors.primaryText, textAlign: 'center', marginBottom: spacing.sm },
+    emptyDescription: { fontFamily, fontSize: 16, fontWeight: '400', color: colors.secondaryText, textAlign: 'center', lineHeight: 24 },
+    list: {},
     card: {
       flexDirection: 'row',
       backgroundColor: colors.secondaryBackground,

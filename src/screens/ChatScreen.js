@@ -1,13 +1,13 @@
 /**
  * AI Lawyer - Chat Screen (Stack)
- * Shown when navigating from Details (Ask AI) - back returns to Details
+ * Header copied from DetailsScreen; menu opens clear-chat dialog.
  */
 
 import React, { useLayoutEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { View, Platform, Alert } from 'react-native';
+import { View, Platform, Alert, StyleSheet } from 'react-native';
 import { MenuView } from '@react-native-menu/menu';
-import { NativeHeaderButtonBack, NativeHeaderButtonEllipsis } from '../components/NativeHeaderButton';
+import { NativeHeaderButtonEllipsis } from '../components/NativeHeaderButton';
 import { useAILawyerChat } from '../context/AILawyerChatContext';
 import { useTheme } from '../theme';
 import ChatView from '../components/ChatView';
@@ -59,19 +59,15 @@ export default function ChatScreen({ navigation }) {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerBackVisible: false,
+      headerShown: true,
       title: t('screens.aiLawyer'),
-      headerShadowVisible: false,
       headerStyle: { backgroundColor: colors.secondaryBackground },
       headerTitleStyle: { fontSize: 20, fontWeight: Platform.OS === 'android' ? '800' : '600', marginTop: 4, color: colors.primaryText },
       headerTintColor: colors.primaryText,
-      headerLeft: () => (
-        <NativeHeaderButtonBack onPress={() => navigation.goBack()} />
-      ),
       headerRight: () => (
-        <View style={menuButtonWrapStyle}>
-          <MenuView onPressAction={handleMenuAction} actions={chatMenuActions} themeVariant={isDarkMode ? 'dark' : 'light'} style={menuButtonWrapStyle}>
-            <NativeHeaderButtonEllipsis />
+        <View style={styles.menuButtonWrap}>
+          <MenuView onPressAction={handleMenuAction} actions={chatMenuActions} themeVariant={isDarkMode ? 'dark' : 'light'} style={styles.menuButtonWrap}>
+            <NativeHeaderButtonEllipsis iconSize={24} />
           </MenuView>
         </View>
       ),
@@ -79,16 +75,23 @@ export default function ChatScreen({ navigation }) {
     });
   }, [navigation, t, chatMenuActions, colors, isDarkMode]);
 
-  return <ChatView chatPrompt={chatPrompt} chatContext={chatContext} />;
+  return (
+    <View style={styles.container}>
+      <ChatView chatPrompt={chatPrompt} chatContext={chatContext} />
+    </View>
+  );
 }
 
-const menuButtonWrapStyle = {
-  width: 44,
-  height: 44,
-  minWidth: 44,
-  minHeight: 44,
-  maxWidth: 44,
-  maxHeight: 44,
-  justifyContent: 'center',
-  alignItems: 'center',
-};
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  menuButtonWrap: {
+    width: 44,
+    height: 44,
+    minWidth: 44,
+    minHeight: 44,
+    maxWidth: 44,
+    maxHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+});

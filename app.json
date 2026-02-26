@@ -23,9 +23,24 @@
       "usesAppleSignIn": true,
       "infoPlist": {
         "CFBundleDevelopmentRegion": "en",
-        "CFBundleLocalizations": ["en", "ru", "de", "ko", "es", "pt", "fr", "it", "nl", "ar"],
+        "CFBundleLocalizations": [
+          "en",
+          "ru",
+          "de",
+          "ko",
+          "es",
+          "pt",
+          "fr",
+          "it",
+          "nl",
+          "ar"
+        ],
         "ITSAppUsesNonExemptEncryption": false,
-        "LSApplicationQueriesSchemes": ["prefs", "App-prefs", "app-settings"]
+        "LSApplicationQueriesSchemes": [
+          "prefs",
+          "App-prefs",
+          "app-settings"
+        ]
       }
     },
     "android": {
@@ -52,15 +67,44 @@
       "expo-apple-authentication",
       "expo-web-browser",
       "expo-image-picker",
-      ["expo-localization",{"supportedLocales":{"ios":["en","ru","de","ko","es","pt","fr","it","nl","ar"],"android":["en","ru","de","ko","es","pt","fr","it","nl","ar"]}}],
+      [
+        "expo-localization",
+        {
+          "supportedLocales": {
+            "ios": [
+              "en",
+              "ru",
+              "de",
+              "ko",
+              "es",
+              "pt",
+              "fr",
+              "it",
+              "nl",
+              "ar"
+            ],
+            "android": [
+              "en",
+              "ru",
+              "de",
+              "ko",
+              "es",
+              "pt",
+              "fr",
+              "it",
+              "nl",
+              "ar"
+            ]
+          }
+        }
+      ],
       "expo-media-library",
-      ["@sentry/react-native/expo", { "organization": "", "project": "", "url": "https://sentry.io/" }],
       [
         "expo-camera",
         {
           "cameraPermission": "Allow Doc Trust to access your camera"
         }
-      ]
+      ],
     ],
     "extra": {
       "eas": {

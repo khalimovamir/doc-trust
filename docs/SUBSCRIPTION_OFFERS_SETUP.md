@@ -21,6 +21,7 @@
 | `starts_at`      | timestamptz   | Когда оффер становится активным (NULL = сразу) |
 | `ends_at`        | timestamptz   | Когда оффер заканчивается (для модалки и баннера таймер считается до этой даты в режиме `global`) |
 | `duration_seco`  | int4          | Длительность в секундах для режима `per_user` (например 86400 = 24 часа) |
+| `recurrence_hidden_seco` | int4 | Опционально. Для `per_user`: сколько секунд скрывать оффер после `expires_at`, затем снова показать (например 86400 = «через день») |
 | `applies_to_int` | plan_inte     | К какому плану применяется: `'monthly'`, `'yearly'` или NULL (ко всем) |
 | `is_active`      | bool          | Включён ли оффер (по умолчанию true) |
 | `created_at`     | timestamptz   | По умолчанию `now()` |
@@ -65,6 +66,31 @@ insert into public.subscription_offers (
   true
 );
 ```
+
+**Вариант C: персональный оффер «через день»** (24 часа показ, 24 часа скрыто, затем снова показ):
+
+Примените миграцию `20260226100000_offer_recurrence.sql`, затем:
+
+```sql
+insert into public.subscription_offers (
+  code, title, subtitle, discount_type, discount_perc, mode,
+  duration_seco, recurrence_hidden_seco, applies_to_int, is_active
+) values (
+  'LIMITED_50_RECURRING',
+  'Limited Offer!',
+  '50% OFF',
+  'percent',
+  50,
+  'per_user',
+  86400,
+  86400,
+  'yearly',
+  true
+);
+```
+
+- `duration_seco = 86400` — карточка показывается 24 часа.
+- `recurrence_hidden_seco = 86400` — после окончания окна карточка скрыта 24 часа, затем приложение запрашивает следующее окно (RPC `start_next_offer_window`) и снова показывает оффер на 24 часа.
 
 - В приложении: заголовок модалки = `title`, на кнопке = «Get » + `subtitle` + « Now», таймер — до `ends_at` (global) или до `expires_at` в `user_offer_states` (per_user).  
 - Цена «$25.99 Yearly» получается из продукта **yearly** и скидки 50% (см. ниже).
@@ -126,6 +152,32 @@ insert into public.plan_feature_limits (tier, feature, is_unlimited, monthly_lim
 
 ---
 
+## Записи в `user_offer_states` (per_user офферы)
+
+Для офферов с **mode = 'per_user'** запись в **user_offer_states** создаётся **автоматически**, когда пользователь (не Pro) открывает экран Home: приложение вызывает `ensureUserOfferState(userId, offerId)`; если строки нет — делается INSERT, триггер выставляет **expires_at** и **next_show_at**. Вручную добавлять запись не обязательно.
+
+Если баннер не появляется, проверьте:
+- пользователь **не Pro** (в `user_subscriptions` нет активной подписки);
+- оффер **is_active = true**, **mode = 'per_user'**, заданы **duration_seco** и при необходимости **recurrence_hidden_seco**.
+
+**Ручная вставка** (например, для теста или чтобы «завести» оффер конкретному пользователю):
+
+1. В Supabase: **Authentication → Users** — скопируйте **UUID** нужного пользователя.
+2. В **subscription_offers** возьмите **id** оффера (например `b82a740f-a7f4-4f8c-8891-029191150d36`).
+3. В SQL Editor выполните (подставьте свои `user_id` и `offer_id`):
+
+```sql
+insert into public.user_offer_states (user_id, offer_id)
+values (
+  'USER_UUID_СЮДА',
+  'b82a740f-a7f4-4f8c-8891-029191150d36'
+);
+```
+
+Триггер при INSERT сам проставит **expires_at** и **next_show_at** по **duration_seco** и **recurrence_hidden_seco** оффера. После этого при открытии Home у этого пользователя должен отображаться баннер (если он не Pro).
+
+---
+
 ## Кратко: что добавить в `subscription_offers`
 
 1. Применить миграцию с enum'ами и колонками.  
@@ -133,7 +185,7 @@ insert into public.plan_feature_limits (tier, feature, is_unlimited, monthly_lim
    - **title** = «Temporary Discount» (или «Limited Offer!»),
    - **subtitle** = «50% OFF»,
    - **discount_type** = `'percent'`, **discount_perc** = 50,
-   - **mode** = `'global'` (и задать **ends_at**) или `'per_user'` (и задать **duration_seco**),
+   - **mode** = `'global'` (и задать **ends_at**) или `'per_user'` (и задать **duration_seco**; при необходимости **recurrence_hidden_seco** для повтора «через день»),
    - **applies_to_int** = `'yearly'` (чтобы скидка применялась к годовой цене).  
 3. В **subscription_products** иметь годовой план с **price_cents** = 5198 (чтобы после 50% получилось $25.99).  
 4. При необходимости заполнить **feature_catalog** и **plan_feature_limits** для таблицы сравнения FREE/PRO в модалке.

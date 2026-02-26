@@ -1,8 +1,6 @@
 /**
  * AI Lawyer - Scanner Screen
- * In-app camera: user shoots on this page. No app bar — back (left), flashlight (right).
- * Card slots: user selects which slot receives the next image (highlighted).
- * Text detection overlay placeholder for future ML/OCR bounding boxes.
+ * Scan flow: header + slots + gallery + capture (expo-camera) + Analyze.
  */
 
 import React, { useState, useCallback, useRef, useMemo, useEffect } from 'react';
@@ -12,21 +10,18 @@ import {
   StyleSheet,
   TouchableOpacity,
   Image,
-  ActivityIndicator,
   Alert,
   ScrollView,
-  Platform,
   Animated,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useFocusEffect } from '@react-navigation/native';
-import { launchScanner } from '@dariyd/react-native-document-scanner';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as MediaLibrary from 'expo-media-library';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { X, Plus, ChevronLeft, Zap, Check, Info } from 'lucide-react-native';
+import { X, Plus, ChevronLeft, Check, Info, FileScan, Zap } from 'lucide-react-native';
 import { fontFamily, spacing, useTheme } from '../theme';
 import IconButton from '../components/IconButton';
-import { getTextFromImageUri } from '../lib/uploadDocument';
 
 const MAX_SCANS = 20;
 const CARD_SIZE = 56;
@@ -56,13 +51,16 @@ function createStyles(colors) {
       width: 52,
       height: 52,
       borderRadius: 26,
-      backgroundColor: 'rgba(255,255,255,0.13)',
+      backgroundColor: 'rgba(255,255,255,0.15)',
       alignItems: 'center',
       justifyContent: 'center',
     },
-    cameraWrap: { flex: 1, overflow: 'hidden' },
-    camera: { flex: 1, width: '100%' },
-    cardsRowWrap: { backgroundColor: '#0b1220', paddingTop: 8, paddingBottom: spacing.sm, overflow: 'visible' },
+    scanArea: { flex: 1, overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
+    scanPreview: { flex: 1, width: '100%' },
+    scanPlaceholder: { flex: 1, width: '100%', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
+    scanPlaceholderIcon: { marginBottom: 16, opacity: 0.7 },
+    scanPlaceholderText: { fontFamily, fontSize: 17, color: 'rgba(255,255,255,0.85)', textAlign: 'center' },
+    cardsRowWrap: { backgroundColor: '#000', paddingTop: 8, paddingBottom: spacing.sm, overflow: 'visible' },
     cardsRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, paddingTop: 10, gap: spacing.sm },
     cardWrap: { position: 'relative' },
     card: { width: CARD_SIZE, height: CARD_SIZE, borderRadius: 12, overflow: 'hidden', borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
@@ -100,7 +98,7 @@ function createStyles(colors) {
       justifyContent: 'center',
     },
     bottomPanel: {
-      backgroundColor: '#0b1220',
+      backgroundColor: '#000',
       paddingHorizontal: spacing.md,
       paddingTop: spacing.sm,
       paddingBottom: spacing.xl,
@@ -163,13 +161,6 @@ function createStyles(colors) {
       borderColor: colors.success,
     },
     permissionButtonText: { fontFamily, fontSize: 16, fontWeight: '600', color: '#ffffff' },
-    extractingOverlay: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(0,0,0,0.6)',
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    extractingText: { fontFamily, fontSize: 16, color: '#fff', marginTop: spacing.md },
     errorBanner: {
       position: 'absolute',
       bottom: 0,
@@ -180,6 +171,19 @@ function createStyles(colors) {
       alignItems: 'center',
     },
     errorText: { fontFamily, fontSize: 14, color: colors.error, textAlign: 'center' },
+    scanningBanner: {
+      position: 'absolute',
+      top: 72,
+      left: spacing.lg,
+      right: spacing.lg,
+      backgroundColor: 'rgba(0,0,0,0.65)',
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.md,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    scanningBannerText: { fontFamily, fontSize: 15, fontWeight: '600', color: '#fff' },
   };
 }
 
@@ -187,20 +191,26 @@ export default function ScannerScreen({ navigation }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = useMemo(() => StyleSheet.create(createStyles(colors)), [colors]);
-  const [permission, requestPermission] = useCameraPermissions();
-  const cameraRef = useRef(null);
   const captureScale = useRef(new Animated.Value(1)).current;
+  const cameraRef = useRef(null);
+  const [permission, requestPermission] = useCameraPermissions();
 
   const [scans, setScans] = useState([]);
   const [slotCount, setSlotCount] = useState(5);
   const [targetSlotIndex, setTargetSlotIndex] = useState(0);
   const [lastGalleryUri, setLastGalleryUri] = useState(null);
-  const [torchOn, setTorchOn] = useState(false);
-  const [extracting, setExtracting] = useState(false);
+  const [lastDevicePhotoUri, setLastDevicePhotoUri] = useState(null);
   const [error, setError] = useState('');
   const [galleryGranted, setGalleryGranted] = useState(null);
+  const [torchOn, setTorchOn] = useState(false);
 
   const ImagePicker = useMemo(() => require('expo-image-picker'), []);
+
+  useEffect(() => {
+    if (!permission?.granted) {
+      requestPermission();
+    }
+  }, [permission?.granted, requestPermission]);
 
   const checkGalleryPermission = useCallback(async () => {
     const { status } = await ImagePicker.getMediaLibraryPermissionsAsync();
@@ -208,12 +218,13 @@ export default function ScannerScreen({ navigation }) {
   }, [ImagePicker]);
 
   useEffect(() => {
-    if (permission?.granted) {
-      checkGalleryPermission();
-    } else {
-      setGalleryGranted(null);
-    }
-  }, [permission?.granted, checkGalleryPermission]);
+    checkGalleryPermission();
+  }, [checkGalleryPermission]);
+
+  useEffect(() => {
+    const selected = scans[targetSlotIndex];
+    if (selected) setTorchOn(false);
+  }, [scans, targetSlotIndex]);
 
   const requestGalleryPermission = useCallback(async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -229,11 +240,15 @@ export default function ScannerScreen({ navigation }) {
     setScans((prev) => {
       const next = [...prev];
       next.splice(atIndex, 0, { uri, mimeType: mimeType || 'image/jpeg' });
-      return next.slice(0, MAX_SCANS);
+      const result = next.slice(0, MAX_SCANS);
+      if (result.length === slotCount && slotCount < MAX_SCANS) {
+        setSlotCount((s) => Math.min(s + 1, MAX_SCANS));
+      }
+      return result;
     });
     setTargetSlotIndex((prev) => Math.min(prev + 1, MAX_SCANS - 1));
     setError('');
-  }, []);
+  }, [slotCount]);
 
   const addScansAt = useCallback((images, startIndex) => {
     if (!images?.length) return;
@@ -244,11 +259,15 @@ export default function ScannerScreen({ navigation }) {
         next.splice(at, 0, { uri: img.uri, mimeType: img.type || 'image/jpeg' });
         at++;
       }
-      return next.slice(0, MAX_SCANS);
+      const result = next.slice(0, MAX_SCANS);
+      if (result.length >= slotCount && slotCount < MAX_SCANS) {
+        setSlotCount((s) => Math.min(MAX_SCANS, Math.max(s, result.length + 1)));
+      }
+      return result;
     });
     setTargetSlotIndex((prev) => Math.min(prev + images.length, MAX_SCANS - 1));
     setError('');
-  }, []);
+  }, [slotCount]);
 
   const removeScan = useCallback((index) => {
     setScans((prev) => prev.filter((_, i) => i !== index));
@@ -262,29 +281,46 @@ export default function ScannerScreen({ navigation }) {
       const ok = await requestPermission();
       if (!ok) return;
     }
+    if (!cameraRef.current) return;
     try {
-      const result = await launchScanner({ quality: 0.9, includeBase64: false });
-      if (result.didCancel) return;
-      if (result.error) {
-        Alert.alert(t('common.error'), result.errorMessage || t('scanner.noTextFound'));
-        return;
-      }
-      const images = result.images;
-      if (images?.length) {
-        addScansAt(images, targetSlotIndex);
+      const photo = await cameraRef.current.takePictureAsync({ quality: 0.9 });
+      if (photo?.uri) {
+        addScanAt(photo.uri, 'image/jpeg', targetSlotIndex);
       }
     } catch (e) {
       Alert.alert(t('common.error'), e?.message || t('scanner.noTextFound'));
     }
-  }, [scans.length, slotCount, permission?.granted, requestPermission, addScansAt, targetSlotIndex, t]);
+  }, [scans.length, slotCount, permission?.granted, requestPermission, addScanAt, targetSlotIndex, t]);
+
+  const fetchLastDevicePhoto = useCallback(async () => {
+    if (!galleryGranted) return;
+    try {
+      const { assets } = await MediaLibrary.getAssetsAsync({
+        first: 1,
+        mediaType: MediaLibrary.MediaType.photo,
+        sortBy: [[MediaLibrary.SortBy.creationTime, false]],
+      });
+      if (assets?.length > 0) {
+        const info = await MediaLibrary.getAssetInfoAsync(assets[0].id);
+        if (info?.localUri) setLastDevicePhotoUri(info.localUri);
+      }
+    } catch (_) {
+      // ignore
+    }
+  }, [galleryGranted]);
 
   useFocusEffect(
     useCallback(() => {
-      if (permission?.granted) {
-        checkGalleryPermission();
-      }
-    }, [permission?.granted, checkGalleryPermission])
+      checkGalleryPermission();
+      requestGalleryPermission().then((granted) => {
+        if (granted) fetchLastDevicePhoto();
+      });
+    }, [checkGalleryPermission, requestGalleryPermission, fetchLastDevicePhoto])
   );
+
+  useEffect(() => {
+    if (galleryGranted) fetchLastDevicePhoto();
+  }, [galleryGranted, fetchLastDevicePhoto]);
 
   const handleChooseGallery = useCallback(async () => {
     if (scans.length >= slotCount) return;
@@ -300,106 +336,32 @@ export default function ScannerScreen({ navigation }) {
     addScanAt(asset.uri, asset.mimeType || 'image/jpeg', targetSlotIndex);
   }, [scans.length, slotCount, requestGalleryPermission, addScanAt, targetSlotIndex, ImagePicker]);
 
-  const handleStartAnalyzing = useCallback(async () => {
+  const handleStartAnalyzing = useCallback(() => {
     if (scans.length === 0) return;
     setError('');
-    setExtracting(true);
-    try {
-      const parts = [];
-      for (let i = 0; i < scans.length; i++) {
-        const { uri, mimeType } = scans[i];
-        const text = await getTextFromImageUri(uri, mimeType || 'image/jpeg');
-        if (text && text.trim()) {
-          if (parts.length > 0) parts.push('\n\n--- \n\n');
-          parts.push(text.trim());
-        }
-      }
-      const combined = parts.join('');
-      if (!combined || combined.length < 10) {
-        setError(t('scanner.noTextFound'));
-        setExtracting(false);
-        return;
-      }
-      navigation.navigate('Analyzing', { documentText: combined, source: 'scan' });
-    } catch (e) {
-      setError(e?.message || t('scanner.noTextFound'));
-    } finally {
-      setExtracting(false);
-    }
-  }, [scans, t, navigation]);
+    navigation.navigate('Analyzing', {
+      scanImages: scans.map((s) => ({ uri: s.uri, mimeType: s.mimeType || 'image/jpeg' })),
+      source: 'scan',
+    });
+  }, [scans, navigation]);
 
   const canAddMore = slotCount < MAX_SCANS;
   const hasScans = scans.length > 0;
-
-  if (!permission) {
-    return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
-  }
-
-  if (!permission.granted) {
-    return (
-      <SafeAreaView style={[styles.container, { justifyContent: 'center', padding: spacing.lg }]} edges={['top']}>
-        <Text style={{ fontFamily, fontSize: 16, color: '#fff', textAlign: 'center', marginBottom: spacing.md }}>
-          {t('scanner.permissionCamera')}
-        </Text>
-        <TouchableOpacity
-          style={{ paddingVertical: 12, paddingHorizontal: 24, backgroundColor: colors.primary, borderRadius: 12 }}
-          onPress={requestPermission}
-        >
-          <Text style={styles.permissionButtonText}>{t('common.next')}</Text>
-        </TouchableOpacity>
-        <IconButton icon={ChevronLeft} onPress={() => navigation.goBack()} size={36} iconSize={22} style={{ position: 'absolute', left: spacing.md, top: spacing.lg }} />
-      </SafeAreaView>
-    );
-  }
-
-  if (galleryGranted === null) {
-    return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
-  }
-
-  if (!galleryGranted) {
-    return (
-      <SafeAreaView style={[styles.container, { justifyContent: 'center', padding: spacing.lg }]} edges={['top']}>
-        <Text style={{ fontFamily, fontSize: 16, color: '#fff', textAlign: 'center', marginBottom: spacing.md }}>
-          {t('scanner.permissionGallery')}
-        </Text>
-        <TouchableOpacity
-          style={{ paddingVertical: 12, paddingHorizontal: 24, backgroundColor: colors.primary, borderRadius: 12 }}
-          onPress={requestGalleryPermission}
-        >
-          <Text style={styles.permissionButtonText}>{t('common.next')}</Text>
-        </TouchableOpacity>
-        <IconButton icon={ChevronLeft} onPress={() => navigation.goBack()} size={36} iconSize={22} style={{ position: 'absolute', left: spacing.md, top: spacing.lg }} />
-      </SafeAreaView>
-    );
-  }
-
   const selectedScan = scans[targetSlotIndex];
 
   return (
     <View style={styles.container}>
-      <View style={styles.cameraWrap}>
+      <View style={styles.scanArea}>
         {selectedScan ? (
-          <Image source={{ uri: selectedScan.uri }} style={styles.camera} resizeMode="contain" />
+          <Image source={{ uri: selectedScan.uri }} style={styles.scanPreview} resizeMode="contain" />
+        ) : permission?.granted ? (
+          <CameraView ref={cameraRef} style={styles.scanPreview} enableTorch={torchOn} />
         ) : (
-          <CameraView
-            ref={cameraRef}
-            style={styles.camera}
-            facing="back"
-            enableTorch={torchOn}
-          />
-        )}
-        {extracting && (
-          <View style={styles.extractingOverlay}>
-            <ActivityIndicator size="large" color="#fff" />
-            <Text style={styles.extractingText}>{t('scanner.extracting')}</Text>
+          <View style={styles.scanPlaceholder}>
+            <View style={styles.scanPlaceholderIcon}>
+              <FileScan size={64} color="rgba(255,255,255,0.6)" strokeWidth={1.5} />
+            </View>
+            <Text style={styles.scanPlaceholderText}>{t('scanner.tapToScan')}</Text>
           </View>
         )}
         {error ? (
@@ -419,19 +381,26 @@ export default function ScannerScreen({ navigation }) {
             <ChevronLeft size={24} color="#fff" strokeWidth={2} />
           </TouchableOpacity>
           <View style={styles.topRowRight}>
+            {permission?.granted && (
+              <TouchableOpacity
+                style={styles.controlButton}
+                onPress={() => setTorchOn((on) => !on)}
+                activeOpacity={0.8}
+              >
+                <Zap
+                  size={22}
+                  color={torchOn ? colors.primary : '#fff'}
+                  strokeWidth={torchOn ? 2.5 : 2}
+                  fill={torchOn ? colors.primary : 'transparent'}
+                />
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={styles.controlButton}
               onPress={() => Alert.alert(t('scanner.title'), t('scanner.instructions'))}
               activeOpacity={0.8}
             >
               <Info size={22} color="#fff" strokeWidth={2} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.controlButton}
-              onPress={() => setTorchOn((v) => !v)}
-              activeOpacity={0.8}
-            >
-              <Zap size={22} color={torchOn ? colors.primary : '#fff'} strokeWidth={2} fill={torchOn ? colors.primary : 'transparent'} />
             </TouchableOpacity>
           </View>
         </View>
@@ -474,7 +443,7 @@ export default function ScannerScreen({ navigation }) {
                 setSlotCount((prev) => Math.min(prev + 1, MAX_SCANS));
                 setTargetSlotIndex(slotCount);
               }}
-              disabled={extracting}
+              disabled={false}
               activeOpacity={0.85}
             >
               <Plus size={28} color="rgba(255,255,255,0.9)" strokeWidth={2} />
@@ -488,11 +457,11 @@ export default function ScannerScreen({ navigation }) {
           <TouchableOpacity
             style={styles.galleryThumb}
             onPress={handleChooseGallery}
-            disabled={extracting || !canAddMore}
+            disabled={!canAddMore}
             activeOpacity={0.85}
           >
-            {lastGalleryUri ? (
-              <Image source={{ uri: lastGalleryUri }} style={styles.galleryThumbImage} resizeMode="cover" />
+            {(lastDevicePhotoUri ?? lastGalleryUri) ? (
+              <Image source={{ uri: lastDevicePhotoUri ?? lastGalleryUri }} style={styles.galleryThumbImage} resizeMode="cover" />
             ) : (
               <View style={styles.galleryThumbPlaceholder}>
                 <Text style={styles.galleryThumbPlaceholderText}>📷</Text>
@@ -509,7 +478,7 @@ export default function ScannerScreen({ navigation }) {
               onPressOut={() => {
                 Animated.spring(captureScale, { toValue: 1, useNativeDriver: true, speed: 100, bounciness: 6 }).start();
               }}
-              disabled={extracting || !canAddMore}
+              disabled={!canAddMore}
               activeOpacity={1}
             >
               <Animated.View style={[styles.captureButtonInnerWrap, { transform: [{ scale: captureScale }] }]}>
@@ -520,7 +489,7 @@ export default function ScannerScreen({ navigation }) {
           <TouchableOpacity
             style={[styles.checkButton, hasScans && styles.checkButtonActive]}
             onPress={handleStartAnalyzing}
-            disabled={!hasScans || extracting}
+            disabled={!hasScans}
             activeOpacity={0.85}
           >
             <Check size={24} color={hasScans ? colors.success : '#fff'} strokeWidth={2.5} />

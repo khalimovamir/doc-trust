@@ -11,6 +11,7 @@ import {
   getCachedAnalysisIds,
   setCachedAnalysisIds,
   getCachedAnalysesList,
+  removeCachedAnalysis,
 } from './analysisCache';
 
 function mapDocType(documentType) {
@@ -356,4 +357,51 @@ export async function updateGuidanceItemDone(itemId, isDone) {
     .update({ is_done: !!isDone })
     .eq('id', itemId);
   if (error) throw error;
+}
+
+/**
+ * Delete analysis and all related rows in Supabase, then evict cache.
+ * Order: analysis_issues -> analysis_guidance_items -> analyses -> document_versions -> documents.
+ * @param {string} analysisId
+ */
+export async function deleteAnalysisWithRelated(analysisId) {
+  if (!analysisId) throw new Error('analysisId required');
+
+  const { data: a, error: aErr } = await supabase
+    .from('analyses')
+    .select('id, document_version_id')
+    .eq('id', analysisId)
+    .single();
+  if (aErr || !a) throw new Error('Analysis not found');
+
+  let documentId = null;
+  if (a.document_version_id) {
+    const { data: ver } = await supabase
+      .from('document_versions')
+      .select('document_id')
+      .eq('id', a.document_version_id)
+      .single();
+    documentId = ver?.document_id ?? null;
+  }
+
+  const { error: issuesErr } = await supabase.from('analysis_issues').delete().eq('analysis_id', analysisId);
+  if (issuesErr) throw new Error(`analysis_issues: ${issuesErr.message}`);
+
+  const { error: guidanceErr } = await supabase.from('analysis_guidance_items').delete().eq('analysis_id', analysisId);
+  if (guidanceErr) throw new Error(`analysis_guidance_items: ${guidanceErr.message}`);
+
+  const { error: analysisDelErr } = await supabase.from('analyses').delete().eq('id', analysisId);
+  if (analysisDelErr) throw new Error(`analyses: ${analysisDelErr.message}`);
+
+  if (a.document_version_id) {
+    const { error: verErr } = await supabase.from('document_versions').delete().eq('id', a.document_version_id);
+    if (verErr) throw new Error(`document_versions: ${verErr.message}`);
+  }
+
+  if (documentId) {
+    const { error: docErr } = await supabase.from('documents').delete().eq('id', documentId);
+    if (docErr) throw new Error(`documents: ${docErr.message}`);
+  }
+
+  await removeCachedAnalysis(analysisId);
 }

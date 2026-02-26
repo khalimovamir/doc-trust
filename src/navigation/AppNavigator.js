@@ -40,6 +40,7 @@ import AnalyzingScreen from '../screens/AnalyzingScreen';
 import ComparingScreen from '../screens/ComparingScreen';
 import ComparingResultScreen from '../screens/ComparingResultScreen';
 import ChatScreen from '../screens/ChatScreen';
+import AILawyerScreen from '../screens/AILawyerScreen';
 import { parseOfferDeepLink } from '../lib/deepLinks';
 
 const AuthStack = createNativeStackNavigator();
@@ -121,6 +122,11 @@ function AppNavigatorInner() {
           options={{ ...headerWithBackOptions, headerShown: true, title: t('screens.details') }}
         />
         <AppStack.Screen
+          name="AILawyer"
+          component={AILawyerScreen}
+          options={{ ...headerWithBackOptions, headerShown: true, title: t('screens.aiLawyer') }}
+        />
+        <AppStack.Screen
           name="AnalysisResult"
           component={AnalysisResultScreen}
           options={{ ...headerWithBackOptions, headerShown: true, title: t('screens.analysis') }}
@@ -128,7 +134,11 @@ function AppNavigatorInner() {
         <AppStack.Screen
           name="Chat"
           component={ChatScreen}
-          options={{ ...headerWithBackOptions, headerShown: true, title: t('screens.aiLawyer') }}
+          options={{
+            ...headerWithBackOptions,
+            headerShown: true,
+            title: t('screens.aiLawyer'),
+          }}
         />
         <AppStack.Screen
           name="Jurisdiction"

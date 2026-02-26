@@ -27,6 +27,21 @@ export function formatDateShort(isoOrDate) {
 }
 
 /**
+ * Format for chat card timestamp: "24 мая, 3:34 PM" (day month, time).
+ * @param {string|Date} isoOrDate
+ * @returns {string}
+ */
+export function formatChatCardTime(isoOrDate) {
+  if (!isoOrDate) return '';
+  const d = typeof isoOrDate === 'string' ? new Date(isoOrDate) : isoOrDate;
+  if (Number.isNaN(d.getTime())) return '';
+  const locale = getDateLocale();
+  const datePart = d.toLocaleDateString(locale, { day: 'numeric', month: 'long' });
+  const timePart = d.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit', hour12: true });
+  return `${datePart}, ${timePart}`;
+}
+
+/**
  * Format date with time (e.g. for feature requests: "Feb 2026, 3:45 PM").
  * @param {string|Date} isoOrDate
  * @returns {string}

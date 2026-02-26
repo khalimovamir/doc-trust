@@ -119,6 +119,21 @@ export async function ensureUserOfferState(userId, offerId) {
 }
 
 /**
+ * Start next show window for recurring per_user offer (when now >= next_show_at).
+ * Returns updated state or null. Call when offer has recurrence_hidden_seco and state.next_show_at is due.
+ */
+export async function startNextOfferWindow(offerId) {
+  if (!offerId) return null;
+  const { data, error } = await supabase.rpc('start_next_offer_window', { p_offer_id: offerId });
+  if (error) {
+    console.warn('startNextOfferWindow failed:', error?.message);
+    return null;
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  return row ?? null;
+}
+
+/**
  * Dismiss offer (user closed without buying)
  */
 export async function dismissUserOffer(userId, offerId) {

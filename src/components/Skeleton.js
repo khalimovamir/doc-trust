@@ -6,7 +6,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { View, Animated, StyleSheet } from 'react-native';
-import { useTheme } from '../theme';
+import { useTheme, spacing, borderRadius } from '../theme';
 
 const PULSE_MIN = 0.35;
 const PULSE_MAX = 0.75;
@@ -144,6 +144,63 @@ export function SkeletonDetails() {
 }
 
 /**
+ * Preset: Limited Offer banner — form and layout match (rounded rect, left: title + subtitle + countdown boxes; right: image area).
+ * Colors: dimmed blue container to match banner, skeleton pulse on placeholders.
+ */
+export function SkeletonOfferBanner({ style }) {
+  const { colors } = useTheme();
+  const containerBg = colors.primary ? `${colors.primary}2a` : 'rgba(59,130,246,0.18)'; // hex alpha ~17%
+  return (
+    <View style={[offerBannerStyles.container, { backgroundColor: containerBg }, style]}>
+      <View style={offerBannerStyles.left}>
+        <Skeleton height={20} width={140} borderRadius={6} style={offerBannerStyles.title} />
+        <Skeleton height={16} width={80} borderRadius={6} style={offerBannerStyles.subtitle} />
+        <View style={offerBannerStyles.countdownRow}>
+          <Skeleton height={32} width={40} borderRadius={8} />
+          <View style={offerBannerStyles.colon} />
+          <Skeleton height={32} width={40} borderRadius={8} />
+          <View style={offerBannerStyles.colon} />
+          <Skeleton height={32} width={40} borderRadius={8} />
+        </View>
+      </View>
+      <Skeleton width={120} height={120} borderRadius={12} style={offerBannerStyles.image} />
+    </View>
+  );
+}
+
+/**
+ * Preset: AI Lawyer chat list card — same form as chatCard (title, date, 2-line preview, icon space).
+ */
+export function SkeletonChatCard({ style }) {
+  const { colors } = useTheme();
+  const cardStyle = {
+    width: '100%',
+    backgroundColor: colors.secondaryBackground,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.tertiary,
+    paddingLeft: 16,
+    paddingTop: 18,
+    paddingRight: 14,
+    paddingBottom: 18,
+    marginBottom: spacing.sm,
+  };
+  return (
+    <View style={[cardStyle, style]}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
+        <View style={{ flex: 1, alignItems: 'flex-start' }}>
+          <Skeleton height={18} width="65%" borderRadius={6} />
+          <Skeleton height={14} width="45%" borderRadius={6} style={{ marginTop: 10 }} />
+          <Skeleton height={16} width="100%" borderRadius={6} style={{ marginTop: 10 }} />
+          <Skeleton height={16} width="88%" borderRadius={6} style={{ marginTop: 6 }} />
+        </View>
+        <Skeleton width={24} height={24} borderRadius={4} style={{ marginTop: 2 }} />
+      </View>
+    </View>
+  );
+}
+
+/**
  * Preset: app boot / auth restore (logo + 2 lines)
  */
 export function SkeletonAppBoot({ logoSize = 80 }) {
@@ -165,6 +222,28 @@ const bootStyles = StyleSheet.create({
   },
   line1: {},
   line2: {},
+});
+
+const offerBannerStyles = StyleSheet.create({
+  container: {
+    borderRadius: borderRadius.xl,
+    padding: spacing.md,
+    marginBottom: spacing.xxl,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    overflow: 'hidden',
+    minHeight: 140,
+  },
+  left: { flex: 1, gap: spacing.xxs },
+  title: { marginBottom: 2 },
+  subtitle: { marginBottom: spacing.md },
+  countdownRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  colon: { width: 16, marginHorizontal: 2 },
+  image: { marginLeft: spacing.sm },
 });
 
 const styles = StyleSheet.create({

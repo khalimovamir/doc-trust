@@ -100,3 +100,19 @@ export async function setCachedAnalysisIds(ids) {
     // ignore
   }
 }
+
+/**
+ * Remove one analysis from cache (e.g. after delete in Supabase).
+ * @param {string} analysisId
+ */
+export async function removeCachedAnalysis(analysisId) {
+  if (!analysisId) return;
+  try {
+    await AsyncStorage.removeItem(CACHE_KEY_PREFIX + analysisId);
+    const ids = await getCachedAnalysisIds();
+    const next = ids.filter((id) => id !== analysisId);
+    await AsyncStorage.setItem(LIST_KEY, JSON.stringify(next));
+  } catch {
+    // ignore
+  }
+}

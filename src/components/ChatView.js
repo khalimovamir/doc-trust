@@ -18,12 +18,11 @@ import {
   Animated,
   PanResponder,
   Platform,
+  Easing,
 } from 'react-native';
-import { LiquidGlassView, isLiquidGlassSupported } from '../lib/liquidGlass';
-import { ThumbsUp, ThumbsDown, Paperclip, SendHorizontal, X, FileText, Scale, Shield } from 'lucide-react-native';
+import { Paperclip, SendHorizontal, X, FileText, Scale, Shield } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme, fontFamily, spacing } from '../theme';
-import Skeleton from './Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { useAILawyerChat } from '../context/AILawyerChatContext';
 import { chat as chatApi } from '../lib/ai';
@@ -36,7 +35,6 @@ import {
   getChatMessages,
   addChatMessage,
   updateChatTitle,
-  updateMessageFeedback,
   uploadChatImage,
 } from '../lib/chat';
 
@@ -51,96 +49,15 @@ function formatTime() {
   return new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 }
 
-function RateRow({ messageId, feedback, onLike, onDislike, styles, colors }) {
-  const hasId = !!messageId;
-  const likeColor = feedback === 'like' ? colors.primary : colors.secondaryText;
-  const dislikeColor = feedback === 'dislike' ? colors.primary : colors.secondaryText;
-  const handleLike = () => {
-    if (!hasId || !onLike) return;
-    const next = feedback === 'like' ? null : 'like';
-    onLike(messageId, next);
-  };
-  const handleDislike = () => {
-    if (!hasId || !onDislike) return;
-    const next = feedback === 'dislike' ? null : 'dislike';
-    onDislike(messageId, next);
-  };
-  return (
-    <View style={styles.rateRow}>
-      <TouchableOpacity
-        onPress={handleLike}
-        disabled={!hasId}
-        activeOpacity={0.7}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      >
-        <ThumbsUp
-          size={18}
-          color={likeColor}
-          strokeWidth={feedback === 'like' ? 2 : 1.8}
-          {...(feedback === 'like' && { fill: likeColor })}
-        />
-      </TouchableOpacity>
-      <TouchableOpacity
-        onPress={handleDislike}
-        disabled={!hasId}
-        activeOpacity={0.7}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      >
-        <ThumbsDown
-          size={18}
-          color={dislikeColor}
-          strokeWidth={feedback === 'dislike' ? 2 : 1.8}
-          {...(feedback === 'dislike' && { fill: dislikeColor })}
-        />
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-function AssistantBubble({ messageId, feedback, onLike, onDislike, text, time, styles, colors }) {
-  return (
-    <View style={styles.assistantBlock}>
-      <View style={styles.assistantAvatar}>
-        <Image
-          source={require('../../assets/ai-lawyer-logo.png')}
-          style={styles.assistantAvatarImage}
-          resizeMode="cover"
-        />
-      </View>
-      <View style={styles.assistantBubbleWrap}>
-        <View style={styles.assistantBubble}>
-          <Text style={styles.assistantText}>{text}</Text>
-          <View style={styles.assistantTimeWrap}>
-            <Text style={styles.assistantTime}>{time}</Text>
-          </View>
-        </View>
-        <RateRow
-          messageId={messageId}
-          feedback={feedback}
-          onLike={onLike}
-          onDislike={onDislike}
-          styles={styles}
-          colors={colors}
-        />
-      </View>
-    </View>
-  );
-}
-
-function formatMsgTime(dateStr) {
-  if (!dateStr) return formatTime();
-  try {
-    return new Date(dateStr).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-  } catch (_) {
-    return formatTime();
-  }
-}
-
 function distance(p1, p2) {
   return Math.hypot(p2.pageX - p1.pageX, p2.pageY - p1.pageY);
 }
 
-function FullscreenImageViewer({ uri, onClose, styles }) {
+/**
+ * Full-screen image viewer with pinch-to-zoom and pan (drag to move when zoomed).
+ * Top bar with close button is always visible.
+ */
+function ImageViewerModal({ uri, onClose, styles }) {
   const scale = useRef(new Animated.Value(1)).current;
   const translateX = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(0)).current;
@@ -148,8 +65,18 @@ function FullscreenImageViewer({ uri, onClose, styles }) {
   const baseTranslateX = useRef(0);
   const baseTranslateY = useRef(0);
   const initialDist = useRef(null);
+  const scaleAtPinchStart = useRef(1);
   const startX = useRef(0);
   const startY = useRef(0);
+
+  useEffect(() => {
+    scale.setValue(1);
+    translateX.setValue(0);
+    translateY.setValue(0);
+    baseScale.current = 1;
+    baseTranslateX.current = 0;
+    baseTranslateY.current = 0;
+  }, [uri]);
 
   useEffect(() => {
     const subScale = scale.addListener(({ value }) => { baseScale.current = value; });
@@ -170,6 +97,7 @@ function FullscreenImageViewer({ uri, onClose, styles }) {
         const touches = e.nativeEvent.touches;
         if (touches.length === 2) {
           initialDist.current = distance(touches[0], touches[1]);
+          scaleAtPinchStart.current = baseScale.current;
         } else if (touches.length === 1) {
           startX.current = touches[0].pageX;
           startY.current = touches[0].pageY;
@@ -179,16 +107,14 @@ function FullscreenImageViewer({ uri, onClose, styles }) {
         const touches = e.nativeEvent.touches;
         if (touches.length === 2 && initialDist.current > 0) {
           const d = distance(touches[0], touches[1]);
-          const newScale = (baseScale.current * d) / initialDist.current;
-          const s = Number(newScale);
-          scale.setValue(Math.max(0.5, Math.min(4, Number.isNaN(s) ? 1 : s)));
+          const newScale = (scaleAtPinchStart.current * d) / initialDist.current;
+          const s = Math.max(0.5, Math.min(4, Number.isNaN(newScale) ? 1 : newScale));
+          scale.setValue(s);
         } else if (touches.length === 1) {
-          const dx = Number(touches[0].pageX) - Number(startX.current);
-          const dy = Number(touches[0].pageY) - Number(startY.current);
-          const tx = Number(baseTranslateX.current) + (Number.isNaN(dx) ? 0 : dx);
-          const ty = Number(baseTranslateY.current) + (Number.isNaN(dy) ? 0 : dy);
-          translateX.setValue(Number.isFinite(tx) ? tx : 0);
-          translateY.setValue(Number.isFinite(ty) ? ty : 0);
+          const dx = touches[0].pageX - startX.current;
+          const dy = touches[0].pageY - startY.current;
+          translateX.setValue(baseTranslateX.current + dx);
+          translateY.setValue(baseTranslateY.current + dy);
           startX.current = touches[0].pageX;
           startY.current = touches[0].pageY;
         }
@@ -202,47 +128,171 @@ function FullscreenImageViewer({ uri, onClose, styles }) {
   ).current;
 
   return (
-    <Modal visible transparent animationType="fade">
-      <View style={styles.fullscreenBackdrop} {...panResponder.panHandlers}>
+    <Modal visible={!!uri} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.imageViewerBackdrop} {...panResponder.panHandlers}>
         <Animated.View
-          style={[
-            StyleSheet.absoluteFill,
-            { justifyContent: 'center', alignItems: 'center' },
-          ]}
+          style={[StyleSheet.absoluteFill, styles.imageViewerCenter]}
           pointerEvents="box-none"
         >
           <Animated.View
-            style={{
-              transform: [
-                { scale },
-                { translateX },
-                { translateY },
-              ],
-            }}
+            style={[
+              styles.imageViewerImageWrap,
+              {
+                transform: [{ scale }, { translateX }, { translateY }],
+              },
+            ]}
           >
-            <Image source={{ uri }} style={styles.fullscreenImage} resizeMode="contain" />
+            <Image source={{ uri }} style={styles.imageViewerImage} resizeMode="contain" />
           </Animated.View>
         </Animated.View>
-      </View>
-      <TouchableOpacity
-        style={styles.fullscreenCloseWrap}
-        onPress={onClose}
-        activeOpacity={0.8}
-      >
-        <View style={[styles.fullscreenCloseInner, (Platform.OS !== 'ios' || !isLiquidGlassSupported) && styles.fullscreenCloseFallback]}>
-          {Platform.OS === 'ios' && isLiquidGlassSupported ? (
-            <LiquidGlassView style={[styles.fullscreenCloseGlass]} effect="clear">
-              <X size={24} color="#ffffff" strokeWidth={2.5} />
-            </LiquidGlassView>
-          ) : (
-            <View style={[styles.fullscreenCloseGlass, styles.fullscreenCloseFallback]}>
-              <X size={24} color="#ffffff" strokeWidth={2.5} />
-            </View>
-          )}
+        <View style={styles.imageViewerCloseWrap}>
+          <TouchableOpacity
+            style={styles.imageViewerCloseBtn}
+            onPress={onClose}
+            activeOpacity={0.8}
+          >
+            <X size={24} color="#ffffff" strokeWidth={2.5} />
+          </TouchableOpacity>
         </View>
-      </TouchableOpacity>
+      </View>
     </Modal>
   );
+}
+
+const LOADING_DOT_COLORS = ['#3b82f6', '#38a010', '#8b5cf6', '#ea580c', '#ef4444']; // blue, green, violet, amber, error
+
+/**
+ * Loading indicator while AI is replying: subtle avatar pulse + five colored dots,
+ * calm animation, no card background behind dots.
+ */
+function AILoadingIndicator({ styles }) {
+  const dot1 = useRef(new Animated.Value(0)).current;
+  const dot2 = useRef(new Animated.Value(0)).current;
+  const dot3 = useRef(new Animated.Value(0)).current;
+  const dot4 = useRef(new Animated.Value(0)).current;
+  const dot5 = useRef(new Animated.Value(0)).current;
+  const dots = [dot1, dot2, dot3, dot4, dot5];
+  const pulse = useRef(new Animated.Value(1)).current;
+  const easeOut = Easing.bezier(0.33, 1, 0.68, 1);
+  const staggerMs = 100;
+
+  useEffect(() => {
+    const runners = dots.map((anim, i) => {
+      const bounce = Animated.loop(
+        Animated.sequence([
+          Animated.delay(i * staggerMs),
+          Animated.timing(anim, {
+            toValue: 1,
+            duration: 520,
+            easing: easeOut,
+            useNativeDriver: true,
+          }),
+          Animated.timing(anim, {
+            toValue: 0,
+            duration: 520,
+            easing: Easing.in(Easing.cubic),
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      bounce.start();
+      return bounce;
+    });
+    return () => runners.forEach((r) => r.stop());
+  }, [dot1, dot2, dot3, dot4, dot5]);
+
+  useEffect(() => {
+    const p = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1.04,
+          duration: 1600,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 1600,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    p.start();
+    return () => p.stop();
+  }, [pulse]);
+
+  const dotTranslate = (anim) =>
+    anim.interpolate({ inputRange: [0, 1], outputRange: [0, -7] });
+  const dotOpacity = (anim) =>
+    anim.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] });
+  const dotScale = (anim) =>
+    anim.interpolate({ inputRange: [0, 1], outputRange: [0.88, 1.06] });
+
+  return (
+    <View style={styles.assistantBlock}>
+      <Animated.View style={[styles.assistantAvatar, { transform: [{ scale: pulse }] }]}>
+        <Image
+          source={require('../../assets/ai-lawyer-logo.png')}
+          style={styles.assistantAvatarImage}
+          resizeMode="cover"
+        />
+      </Animated.View>
+      <View style={styles.assistantBubbleWrap}>
+        <View style={styles.loadingBubble}>
+          <View style={styles.loadingDotsRow}>
+            {dots.map((anim, i) => (
+              <Animated.View
+                key={i}
+                style={[
+                  styles.loadingDot,
+                  {
+                    backgroundColor: LOADING_DOT_COLORS[i],
+                    opacity: dotOpacity(anim),
+                    transform: [
+                      { translateY: dotTranslate(anim) },
+                      { scale: dotScale(anim) },
+                    ],
+                  },
+                ]}
+              />
+            ))}
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function AssistantBubble({ text, time, styles, colors }) {
+  return (
+    <View style={styles.assistantBlock}>
+      <View style={styles.assistantAvatar}>
+        <Image
+          source={require('../../assets/ai-lawyer-logo.png')}
+          style={styles.assistantAvatarImage}
+          resizeMode="cover"
+        />
+      </View>
+      <View style={styles.assistantBubbleWrap}>
+        <View style={styles.assistantBubble}>
+          <Text style={styles.assistantText}>{text}</Text>
+          <View style={styles.assistantTimeWrap}>
+            <Text style={styles.assistantTime}>{time}</Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function formatMsgTime(dateStr) {
+  if (!dateStr) return formatTime();
+  try {
+    return new Date(dateStr).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  } catch (_) {
+    return formatTime();
+  }
 }
 
 export default function ChatView({ chatPrompt, chatContext }) {
@@ -252,6 +302,10 @@ export default function ChatView({ chatPrompt, chatContext }) {
   const { user } = useAuth();
   const { currentChatId, setCurrentChatId, wasCleared, setChatContext, refreshChatTrigger } = useAILawyerChat();
   const [loadedChatContext, setLoadedChatContext] = useState(null);
+  /** Document context text from loaded chat (context_data) — sent to API as relatedContext, not shown in UI */
+  const [loadedDocumentContextText, setLoadedDocumentContextText] = useState(null);
+  /** For document-linked chats: 3 short suggestion texts from context_data.initial_suggestions */
+  const [loadedInitialSuggestions, setLoadedInitialSuggestions] = useState(null);
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -260,7 +314,7 @@ export default function ChatView({ chatPrompt, chatContext }) {
   const [contextSheetVisible, setContextSheetVisible] = useState(false);
   const [contextSheetText, setContextSheetText] = useState('');
   const [pendingImage, setPendingImage] = useState(null); // { uri, base64 } for preview and upload
-  const [fullscreenImageUri, setFullscreenImageUri] = useState(null);
+  const [viewedImageUri, setViewedImageUri] = useState(null);
   const scrollRef = useRef(null);
   const sheetTranslateY = useRef(new Animated.Value(800)).current;
 
@@ -369,14 +423,16 @@ export default function ChatView({ chatPrompt, chatContext }) {
               ? { title: chat.context_title, ref: chat.context_data?.ref || chat.context_data?.issue?.id }
               : null
           );
+          const ctxData = chat?.context_data;
+          const docText = ctxData?.contextText ?? (ctxData?.summary ? `${ctxData.documentType || 'Document'}\n\n${ctxData.summary}` : null);
+          setLoadedDocumentContextText(docText || null);
+          setLoadedInitialSuggestions(Array.isArray(ctxData?.initial_suggestions) && ctxData.initial_suggestions.length >= 3 ? ctxData.initial_suggestions : null);
           setMessages(
             msgs.map((m) => ({
               id: m.id,
               role: m.role,
               text: m.content,
               time: formatMsgTime(m.created_at),
-              contextText: m.context_ref || undefined,
-              feedback: m.feedback || null,
               imageUrl: m.image_url || undefined,
             }))
           );
@@ -392,20 +448,24 @@ export default function ChatView({ chatPrompt, chatContext }) {
                 ? { title: recent.context_title, ref: recent.context_data?.ref || recent.context_data?.issue?.id }
                 : null
             );
+            const ctxData = recent?.context_data;
+            const docText = ctxData?.contextText ?? (ctxData?.summary ? `${ctxData.documentType || 'Document'}\n\n${ctxData.summary}` : null);
+            setLoadedDocumentContextText(docText || null);
+            setLoadedInitialSuggestions(Array.isArray(ctxData?.initial_suggestions) && ctxData.initial_suggestions.length >= 3 ? ctxData.initial_suggestions : null);
             setMessages(
               msgs.map((m) => ({
                 id: m.id,
                 role: m.role,
                 text: m.content,
                 time: formatMsgTime(m.created_at),
-                contextText: m.context_ref || undefined,
-                feedback: m.feedback || null,
                 imageUrl: m.image_url || undefined,
               }))
             );
           }
         } else {
           setLoadedChatContext(null);
+          setLoadedDocumentContextText(null);
+          setLoadedInitialSuggestions(null);
           setMessages([]);
           if (chatPrompt?.trim() && !cancelled) {
             const created = await createChat(user.id, 'New chat', null);
@@ -416,6 +476,8 @@ export default function ChatView({ chatPrompt, chatContext }) {
         }
       } else {
         setLoadedChatContext(null);
+        setLoadedDocumentContextText(null);
+        setLoadedInitialSuggestions(null);
         setMessages([]);
       }
       if (!cancelled) setLoadingChat(false);
@@ -436,8 +498,6 @@ export default function ChatView({ chatPrompt, chatContext }) {
             role: m.role,
             text: m.content,
             time: formatMsgTime(m.created_at),
-            contextText: m.context_ref || undefined,
-            feedback: m.feedback || null,
             imageUrl: m.image_url || undefined,
           }))
         );
@@ -473,15 +533,14 @@ export default function ChatView({ chatPrompt, chatContext }) {
     if (!trimmed || loading || !user?.id) return;
     setInputText('');
     const ctx = forceNewChat ? chatContext : activeContext;
-    const contextTextToSend = pendingContextText || null;
-    if (contextTextToSend) clearContextText();
+    const contextTextToSend = pendingContextText || loadedDocumentContextText || null;
+    if (pendingContextText) clearContextText();
     const imageToSend = pendingImage;
     if (imageToSend) setPendingImage(null);
     const userMsg = {
       role: 'user',
       text: trimmed,
       time: formatTime(),
-      ...(contextTextToSend && { contextText: contextTextToSend }),
       ...(imageToSend && { imageUrl: imageToSend.uri }),
     };
     const historyForApi = forceNewChat ? [userMsg] : [...messages, userMsg];
@@ -505,7 +564,7 @@ export default function ChatView({ chatPrompt, chatContext }) {
         if (ctx) setLoadedChatContext({ title: ctx.title, ref: ctx.ref });
         const greetingAdded = await addChatMessage(cid, 'assistant', ASSISTANT_GREETING);
         setMessages((prev) => [
-          { id: greetingAdded.id, role: 'assistant', text: ASSISTANT_GREETING, time: formatTime(), feedback: null },
+          { id: greetingAdded.id, role: 'assistant', text: ASSISTANT_GREETING, time: formatTime() },
           ...prev,
         ]);
       } else {
@@ -550,7 +609,7 @@ export default function ChatView({ chatPrompt, chatContext }) {
 
       setMessages((prev) => [
         ...prev,
-        { id: replyAdded.id, role: 'assistant', text: reply, time: formatTime(), feedback: null },
+        { id: replyAdded.id, role: 'assistant', text: reply, time: formatTime() },
       ]);
     } catch (e) {
       setError(e?.message || 'Failed to get reply');
@@ -568,26 +627,14 @@ export default function ChatView({ chatPrompt, chatContext }) {
     }
   };
 
-  const handleFeedback = (messageId, feedback) => {
-    const previousFeedback = messages.find((m) => m.id === messageId)?.feedback ?? null;
-    setMessages((prev) =>
-      prev.map((m) => (m.id === messageId && m.role === 'assistant' ? { ...m, feedback } : m))
-    );
-    updateMessageFeedback(messageId, feedback).catch(() => {
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === messageId && m.role === 'assistant' ? { ...m, feedback: previousFeedback } : m
-        )
-      );
-    });
-  };
-
   const onlyGreeting =
-    messages.length === 1 &&
-    messages[0]?.role === 'assistant' &&
-    messages[0]?.text === ASSISTANT_GREETING;
+    messages.length === 1 && messages[0]?.role === 'assistant';
   const displayMessages =
     messages.length > 0 ? messages : [{ role: 'assistant', text: ASSISTANT_GREETING, time: formatTime() }];
+  const suggestions =
+    loadedInitialSuggestions && loadedInitialSuggestions.length >= 3
+      ? DEFAULT_SUGGESTIONS.map((item, i) => ({ ...item, text: loadedInitialSuggestions[i] }))
+      : DEFAULT_SUGGESTIONS;
 
   return (
     <View style={styles.container}>
@@ -605,26 +652,9 @@ export default function ChatView({ chatPrompt, chatContext }) {
                   <TouchableOpacity
                     style={styles.msgImageWrap}
                     activeOpacity={1}
-                    onPress={() => setFullscreenImageUri(msg.imageUrl)}
+                    onPress={() => setViewedImageUri(msg.imageUrl)}
                   >
                     <Image source={{ uri: msg.imageUrl }} style={styles.msgImage} resizeMode="cover" />
-                  </TouchableOpacity>
-                ) : null}
-                {msg.contextText ? (
-                  <TouchableOpacity
-                    style={styles.msgContextCardWrap}
-                    activeOpacity={0.8}
-                    onPress={() => {
-                      setContextSheetText(msg.contextText);
-                      setContextSheetVisible(true);
-                    }}
-                  >
-                    <View style={styles.msgContextCard}>
-                      <View style={styles.msgContextCardRow}>
-                        <FileText size={18} color={isDarkMode ? '#000000' : '#ffffff'} strokeWidth={2} />
-                        <Text style={styles.msgContextCardText} numberOfLines={1}>{msg.contextText}</Text>
-                      </View>
-                    </View>
                   </TouchableOpacity>
                 ) : null}
                 {(msg.text != null && msg.text !== '') ? (
@@ -640,10 +670,6 @@ export default function ChatView({ chatPrompt, chatContext }) {
           ) : (
             <AssistantBubble
               key={msg.id || i}
-              messageId={msg.id}
-              feedback={msg.feedback}
-              onLike={handleFeedback}
-              onDislike={handleFeedback}
               text={msg.text}
               time={msg.time}
               styles={styles}
@@ -652,17 +678,11 @@ export default function ChatView({ chatPrompt, chatContext }) {
           )
         )}
         {loading && (
-          <View style={styles.loadingBlock}>
-            <Skeleton width={32} height={32} borderRadius={16} />
-            <View style={styles.loadingSkeletonLines}>
-              <Skeleton height={14} width="70%" style={styles.loadingSkeletonLine} />
-              <Skeleton height={14} width="45%" />
-            </View>
-          </View>
+          <AILoadingIndicator styles={styles} />
         )}
         {(!displayMessages.length || onlyGreeting) && (
           <View style={styles.suggestionsList}>
-            {DEFAULT_SUGGESTIONS.map((item) => {
+            {suggestions.map((item) => {
               const Icon = item.icon;
               return (
                 <TouchableOpacity
@@ -679,35 +699,6 @@ export default function ChatView({ chatPrompt, chatContext }) {
           </View>
         )}
       </ScrollView>
-
-      {pendingContextText ? (
-        <View style={styles.pendingContextCardWrap}>
-          <View style={styles.pendingContextCard}>
-            <View style={styles.pendingContextIconWrap}>
-              <FileText size={22} color={colors.secondaryText} strokeWidth={2} />
-            </View>
-            <TouchableOpacity
-              style={styles.pendingContextTextTouch}
-              activeOpacity={0.8}
-              onPress={() => {
-                setContextSheetText(pendingContextText);
-                setContextSheetVisible(true);
-              }}
-            >
-              <Text style={styles.pendingContextText} numberOfLines={2}>
-                {pendingContextText}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.pendingContextClear}
-              onPress={clearContextText}
-              activeOpacity={0.8}
-            >
-              <X size={20} color={colors.secondaryText} strokeWidth={2} />
-            </TouchableOpacity>
-          </View>
-        </View>
-      ) : null}
 
       <Modal
         visible={contextSheetVisible}
@@ -748,7 +739,7 @@ export default function ChatView({ chatPrompt, chatContext }) {
             <TouchableOpacity
               style={StyleSheet.absoluteFill}
               activeOpacity={1}
-              onPress={() => setFullscreenImageUri(pendingImage.uri)}
+              onPress={() => setViewedImageUri(pendingImage.uri)}
             >
               <Image
                 source={{ uri: pendingImage.uri }}
@@ -767,13 +758,19 @@ export default function ChatView({ chatPrompt, chatContext }) {
         </View>
       ) : null}
 
+      {viewedImageUri ? (
+        <ImageViewerModal
+          uri={viewedImageUri}
+          onClose={() => setViewedImageUri(null)}
+          styles={styles}
+        />
+      ) : null}
+
       <View style={styles.composerWrap}>
         <View style={styles.composerRow}>
-          {!pendingContextText ? (
-            <TouchableOpacity style={styles.attachBtn} onPress={pickImage} activeOpacity={0.8}>
-              <Paperclip size={22} color={colors.secondaryText} strokeWidth={2} />
-            </TouchableOpacity>
-          ) : null}
+          <TouchableOpacity style={styles.attachBtn} onPress={pickImage} activeOpacity={0.8}>
+            <Paperclip size={22} color={colors.secondaryText} strokeWidth={2} />
+          </TouchableOpacity>
           <View style={styles.composerStack}>
             <View style={styles.inputWrap}>
               <TextInput
@@ -812,9 +809,6 @@ export default function ChatView({ chatPrompt, chatContext }) {
         {error && <Text style={styles.errorText}>{error}</Text>}
       </View>
 
-      {fullscreenImageUri ? (
-        <FullscreenImageViewer uri={fullscreenImageUri} onClose={() => setFullscreenImageUri(null)} styles={styles} />
-      ) : null}
     </View>
   );
 }
@@ -849,7 +843,6 @@ function createStyles(colors, isDarkMode) {
     assistantText: { fontFamily, fontSize: 16, lineHeight: 24, fontWeight: '500', color: colors.primaryText },
     assistantTimeWrap: { paddingTop: 6, paddingRight: 0, paddingBottom: 2 },
     assistantTime: { fontFamily, fontSize: 12, fontWeight: '400', color: colors.secondaryText, textAlign: 'right' },
-    rateRow: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 4, paddingRight: 14 },
     userBlock: { width: '100%', alignItems: 'flex-end' },
     userBubble: {
       width: Dimensions.get('window').width * 0.72,
@@ -909,31 +902,6 @@ function createStyles(colors, isDarkMode) {
     fontWeight: '400',
     color: '#ffffff',
   },
-    pendingContextCardWrap: {
-      paddingHorizontal: spacing.md,
-      paddingTop: spacing.sm,
-      paddingBottom: 0,
-    },
-    pendingContextCard: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      gap: 8,
-      borderRadius: 20,
-      borderWidth: 1,
-      borderColor: colors.tertiary,
-      backgroundColor: colors.primaryBackground,
-      padding: 14,
-    },
-    pendingContextIconWrap: { paddingTop: 2 },
-    pendingContextTextTouch: { flex: 1 },
-    pendingContextText: {
-      fontFamily,
-      fontSize: 16,
-      fontWeight: '400',
-      color: colors.primaryText,
-      lineHeight: 24,
-    },
-    pendingContextClear: { padding: 4 },
     pendingImageWrap: {
       paddingHorizontal: spacing.md,
       paddingTop: 12,
@@ -974,43 +942,45 @@ function createStyles(colors, isDarkMode) {
       borderRadius: 10,
       backgroundColor: colors.tertiary,
     },
-    fullscreenBackdrop: {
+    imageViewerBackdrop: {
       flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.9)',
+      backgroundColor: '#000000',
       justifyContent: 'center',
       alignItems: 'center',
     },
-    fullscreenImage: {
+    imageViewerCenter: {
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    imageViewerImageWrap: {
       width: Dimensions.get('window').width,
       height: Dimensions.get('window').height,
     },
-    fullscreenCloseWrap: {
+    imageViewerImage: {
+      width: '100%',
+      height: '100%',
+    },
+    imageViewerCloseWrap: {
       position: 'absolute',
-      top: 50,
-      right: 16,
+      top: 0,
+      left: 0,
+      right: 0,
+      paddingTop: Platform.OS === 'ios' ? 54 : 40,
+      paddingBottom: 12,
+      paddingHorizontal: 16,
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      alignItems: 'center',
+      backgroundColor: 'rgba(0,0,0,0.6)',
       zIndex: 10,
     },
-    fullscreenCloseInner: {
+    imageViewerCloseBtn: {
       width: 44,
       height: 44,
       borderRadius: 22,
-      overflow: 'hidden',
-    },
-    fullscreenCloseGlass: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
+      backgroundColor: 'rgba(255,255,255,0.2)',
       alignItems: 'center',
       justifyContent: 'center',
-    },
-    fullscreenCloseFallback: {
-      backgroundColor: colors.alternate,
-      borderWidth: 0.5,
-      borderColor: colors.tertiary,
-      ...(Platform.select({
-        ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8 },
-        android: { elevation: 3 },
-      })),
     },
     sheetBackdrop: {
       ...StyleSheet.absoluteFillObject,
@@ -1074,9 +1044,21 @@ function createStyles(colors, isDarkMode) {
     },
     userText: { fontFamily, fontSize: 16, lineHeight: 24, fontWeight: '500', color: colors.primaryText },
     userTime: { fontFamily, fontSize: 12, fontWeight: '400', color: isDarkMode ? 'rgba(255,255,255,0.5)' : colors.secondaryText, textAlign: 'right' },
-    loadingBlock: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 8 },
-    loadingSkeletonLines: { flex: 1, gap: 6 },
-    loadingSkeletonLine: { marginBottom: 0 },
+    loadingBubble: {
+      minHeight: 44,
+      justifyContent: 'center',
+      backgroundColor: 'transparent',
+      paddingVertical: 8,
+      paddingLeft: 16,
+      paddingRight: 0,
+      borderRadius: 0,
+    },
+    loadingDotsRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    loadingDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+    },
     suggestionsList: { gap: 10 },
     suggestionChip: {
       flexDirection: 'row',
@@ -1121,7 +1103,8 @@ function createStyles(colors, isDarkMode) {
     inputWrap: {
       flex: 1,
       flexDirection: 'row',
-      alignItems: 'flex-end',
+      alignItems: 'center',
+      minHeight: 52,
       borderRadius: 26,
       backgroundColor: colors.alternate,
       borderWidth: 1,
@@ -1136,11 +1119,11 @@ function createStyles(colors, isDarkMode) {
       lineHeight: 20,
       color: colors.primaryText,
       paddingLeft: 16,
-      paddingTop: 15,
+      paddingTop: 16,
       paddingRight: 12,
-      paddingBottom: 17,
-      minHeight: 15 + 20 + 17,
-      maxHeight: 15 + 6 * 20 + 17,
+      paddingBottom: 16,
+      minHeight: 52,
+      maxHeight: 52 + 5 * 20,
     },
     sendBtn: {
       width: 46,

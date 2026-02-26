@@ -1,7 +1,6 @@
 /**
- * AI Lawyer - Home Tab Navigator
- * Bottom tabs: Home, History, AI Lawyer, Settings
- * React Navigation v8 — native implementation with liquid glass on iOS 26+
+ * Home Tab Navigator
+ * Tabs: Home, History, AI Lawyer, Settings
  */
 
 import React from 'react';
@@ -9,7 +8,6 @@ import { Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme';
-import { AILawyerTabProvider, useAILawyerTab } from '../context/AILawyerTabContext';
 import HomeScreen from '../screens/HomeScreen';
 import HistoryScreen from '../screens/HistoryScreen';
 import AILawyerScreen from '../screens/AILawyerScreen';
@@ -20,7 +18,7 @@ const Tab = createBottomTabNavigator();
 function HomeTabNavigatorInner() {
   const { t } = useTranslation();
   const { colors } = useTheme();
-  const { isInChat } = useAILawyerTab();
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -72,17 +70,16 @@ function HomeTabNavigatorInner() {
         }}
       />
       <Tab.Screen
-        name="AILawyer"
+        name="AILawyerTab"
         component={AILawyerScreen}
         options={{
           title: t('tabs.aiLawyer'),
           headerShown: false,
-          tabBarStyle: isInChat ? { display: 'none' } : undefined,
           tabBarIcon: Platform.select({
-            ios: {
+            ios: ({ focused }) => ({
               type: 'sfSymbol',
-              name: 'sparkles',
-            },
+              name: focused ? 'sparkles' : 'sparkles',
+            }),
             default: () => ({
               type: 'materialSymbol',
               name: 'auto_awesome',
@@ -114,9 +111,5 @@ function HomeTabNavigatorInner() {
 }
 
 export default function HomeTabNavigator() {
-  return (
-    <AILawyerTabProvider>
-      <HomeTabNavigatorInner />
-    </AILawyerTabProvider>
-  );
+  return <HomeTabNavigatorInner />;
 }
