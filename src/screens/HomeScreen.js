@@ -30,7 +30,6 @@ import {
   Files,
   ArrowRight,
   X,
-  FileText,
 } from 'lucide-react-native';
 import {
   IconRosetteDiscountCheckFilled,
@@ -42,7 +41,7 @@ import { useSubscription } from '../context/SubscriptionContext';
 import { dismissUserOffer, startNextOfferWindow } from '../lib/subscription';
 import { getAnalysesForUserWithCache } from '../lib/documents';
 import { ScoreRing, detailsCreateStyles } from './DetailsScreen';
-import { SkeletonCard, SkeletonOfferBanner } from '../components/Skeleton';
+import { SkeletonScanOrHistoryCard, SkeletonOfferBanner } from '../components/Skeleton';
 
 import { formatDateShort } from '../lib/dateFormat';
 import { getTextFromImageUri } from '../lib/uploadDocument';
@@ -96,18 +95,6 @@ function formatPrice(cents, currency = 'USD') {
 }
 const OFFER_CLOSE_ROW_HEIGHT = 44;
 
-function RecentScansEmpty({ styles, colors, t }) {
-  return (
-    <View style={styles.recentEmptyWrap}>
-      <View style={styles.recentEmptyIconCard}>
-        <FileText size={28} color={colors.primary} strokeWidth={1.5} />
-      </View>
-      <Text style={styles.recentEmptyTitle}>{t('home.recentScansEmptyTitle')}</Text>
-      <Text style={styles.recentEmptyDescription}>{t('home.recentScansEmptyDescription')}</Text>
-    </View>
-  );
-}
-
 function ScanItemCard({ item, onPress, cardStyles, scoreRingStyles, colors }) {
   const s = cardStyles || {};
   return (
@@ -155,6 +142,7 @@ export default function HomeScreen({ navigation }) {
   const [scanning, setScanning] = useState(false);
   const [recentScans, setRecentScans] = useState([]);
   const [recentScansLoading, setRecentScansLoading] = useState(false);
+  const [totalAnalysesCount, setTotalAnalysesCount] = useState(0);
   const [isOfferSheetVisible, setIsOfferSheetVisible] = useState(false);
   const [currentOffer, setCurrentOffer] = useState(null);
   const [userOfferState, setUserOfferState] = useState(null);
@@ -242,6 +230,7 @@ export default function HomeScreen({ navigation }) {
   const fetchRecentScans = useCallback(() => {
     if (!user?.id) {
       setRecentScans([]);
+      setTotalAnalysesCount(0);
       setRecentScansLoading(false);
       return;
     }
@@ -249,6 +238,7 @@ export default function HomeScreen({ navigation }) {
     getAnalysesForUserWithCache(user.id)
       .then((data) => {
         const list = Array.isArray(data) ? data : [];
+        setTotalAnalysesCount(list.length);
         const items = list.slice(0, 3).map((a) => {
           const tags = [a.documentType || t('home.document')];
           if (a.risksCount > 0) tags.push(`${a.risksCount} ${t('home.risks')}`);
@@ -264,7 +254,10 @@ export default function HomeScreen({ navigation }) {
         });
         setRecentScans(items);
       })
-      .catch(() => setRecentScans([]))
+      .catch(() => {
+        setRecentScans([]);
+        setTotalAnalysesCount(0);
+      })
       .finally(() => setRecentScansLoading(false));
   }, [user?.id, t]);
 
@@ -416,28 +409,30 @@ export default function HomeScreen({ navigation }) {
           </TouchableOpacity>
         ) : null}
 
-        {/* Recent Scans */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>{t('home.recentScans')}</Text>
-            <TouchableOpacity onPress={handleSeeAll} activeOpacity={0.7}>
-              <Text style={styles.seeAll}>{t('home.seeAll')}</Text>
-            </TouchableOpacity>
-          </View>
-          {recentScansLoading && recentScans.length === 0 ? (
-            <View style={styles.recentSkeletonList}>
-              {[1, 2, 3].map((key) => (
-                <SkeletonCard key={key} circleSize={56} lineWidths={['85%', '55%', '35%']} style={styles.recentSkeletonCard} />
-              ))}
+        {/* Recent Scans — only when user has at least one analyzed document */}
+        {recentScans.length > 0 ? (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>{t('home.recentScans')}</Text>
+              {totalAnalysesCount > 3 ? (
+                <TouchableOpacity onPress={handleSeeAll} activeOpacity={0.7}>
+                  <Text style={styles.seeAll}>{t('home.seeAll')}</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
-          ) : recentScans.length === 0 ? (
-            <RecentScansEmpty styles={styles} colors={colors} t={t} />
-          ) : (
-            recentScans.map((item) => (
-              <ScanItemCard key={item.id} item={item} onPress={handleScanPress} cardStyles={styles} scoreRingStyles={scoreRingStyles} colors={colors} />
-            ))
-          )}
-        </View>
+            {recentScansLoading ? (
+              <View style={styles.recentSkeletonList}>
+                {[1, 2, 3].map((key) => (
+                  <SkeletonScanOrHistoryCard key={key} style={styles.recentSkeletonCard} />
+                ))}
+              </View>
+            ) : (
+              recentScans.map((item) => (
+                <ScanItemCard key={item.id} item={item} onPress={handleScanPress} cardStyles={styles} scoreRingStyles={scoreRingStyles} colors={colors} />
+              ))
+            )}
+          </View>
+        ) : null}
       </ScrollView>
 
       <Modal
@@ -842,39 +837,6 @@ function createStyles(colors) {
       fontSize: 16,
       fontWeight: '500',
       color: colors.primary,
-    },
-    recentEmptyWrap: {
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingVertical: 32,
-      paddingHorizontal: spacing.lg,
-    },
-    recentEmptyIconCard: {
-      width: 68,
-      height: 68,
-      borderRadius: 34,
-      backgroundColor: colors.secondaryBackground,
-      borderWidth: 1,
-      borderColor: colors.tertiary,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: spacing.lg,
-    },
-    recentEmptyTitle: {
-      fontFamily,
-      fontSize: 20,
-      fontWeight: '600',
-      color: colors.primaryText,
-      textAlign: 'center',
-      marginBottom: spacing.sm,
-    },
-    recentEmptyDescription: {
-      fontFamily,
-      fontSize: 16,
-      fontWeight: '400',
-      color: colors.secondaryText,
-      textAlign: 'center',
-      lineHeight: 24,
     },
     scanCard: {
       flexDirection: 'row',

@@ -22,7 +22,7 @@ import { getAnalysesForUserWithCache } from '../lib/documents';
 import { formatDateShort } from '../lib/dateFormat';
 import { FileText } from 'lucide-react-native';
 import { ScoreRing, detailsCreateStyles } from './DetailsScreen';
-import { SkeletonCard } from '../components/Skeleton';
+import { SkeletonScanOrHistoryCard } from '../components/Skeleton';
 
 const FILTER_IDS = [
   { id: 'all', labelKey: 'history.filterAll' },
@@ -167,7 +167,7 @@ export default function HistoryScreen({ navigation }) {
         {loading ? (
           <View style={styles.list}>
             {[1, 2, 3, 4, 5].map((key) => (
-              <SkeletonCard key={key} circleSize={56} lineWidths={['85%', '55%', '35%']} style={styles.skeletonCard} />
+              <SkeletonScanOrHistoryCard key={key} style={styles.skeletonCard} />
             ))}
           </View>
         ) : filtered.length === 0 ? (

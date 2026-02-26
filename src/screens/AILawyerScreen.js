@@ -40,7 +40,7 @@ export default function AILawyerScreen() {
   const { colors } = useTheme();
   const navigation = useNavigation();
   const { user } = useAuth();
-  const { setCurrentChatId, setChatContext, setRefreshChatTrigger } = useAILawyerChat();
+  const { setCurrentChatId, setChatContext, setChatPrompt, setRefreshChatTrigger } = useAILawyerChat();
 
   const [chats, setChats] = useState([]);
   const [lastMessages, setLastMessages] = useState({});
@@ -83,7 +83,7 @@ export default function AILawyerScreen() {
     if (root?.navigate) root.navigate('Chat');
   };
 
-  const handleStartChat = async () => {
+  const handleStartChat = async (optionalPrompt = null) => {
     if (!user?.id || creating) return;
     setCreating(true);
     try {
@@ -91,6 +91,7 @@ export default function AILawyerScreen() {
       await addChatMessage(created.id, 'assistant', ASSISTANT_GREETING);
       setCurrentChatId(created.id);
       setChatContext(null);
+      setChatPrompt(optionalPrompt ?? '');
       setRefreshChatTrigger((p) => p + 1);
       openChatScreen();
     } catch (_) {}
@@ -198,7 +199,7 @@ export default function AILawyerScreen() {
           flexDirection: 'row',
           alignItems: 'center',
           height: 52,
-          backgroundColor: colors.alternate,
+          backgroundColor: colors.secondaryBackground,
           borderWidth: 1,
           borderColor: colors.tertiary,
           borderRadius: 16,
@@ -243,9 +244,13 @@ export default function AILawyerScreen() {
           marginTop: 10,
         },
         addChatBtnWrap: {
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          bottom: 0,
           paddingHorizontal: spacing.md,
           paddingTop: spacing.md,
-          paddingBottom: 100,
+          paddingBottom: Platform.OS === 'android' ? 100 + 24 : 100,
         },
         addChatBtn: {
           flexDirection: 'row',
@@ -263,49 +268,18 @@ export default function AILawyerScreen() {
     [colors]
   );
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.appBar}>
-          <Text style={styles.headerTitle}>{t('screens.aiLawyer')}</Text>
-        </View>
-        <View style={styles.chatListWrap}>
-          <ScrollView
-            style={styles.content}
-            contentContainerStyle={[styles.listContent, { paddingBottom: 24 + 56 + spacing.md + 100 }]}
-            showsVerticalScrollIndicator={false}
-          >
-            {[1, 2, 3].map((key) => (
-              <SkeletonChatCard key={key} />
-            ))}
-          </ScrollView>
-          <View style={styles.addChatBtnWrap}>
-            <TouchableOpacity
-              style={styles.addChatBtn}
-              onPress={handleAddNewChat}
-              disabled
-              activeOpacity={0.8}
-            >
-              <Plus size={22} color="#ffffff" strokeWidth={2.5} />
-              <Text style={styles.addChatBtnText}>{t('aiLawyer.addNewChat')}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
   const hasChats = chats.length > 0;
+  const showListArea = loading || hasChats;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {hasChats ? (
+      {showListArea ? (
         <View style={styles.appBar}>
           <Text style={styles.headerTitle}>{t('screens.aiLawyer')}</Text>
         </View>
       ) : null}
 
-      {!hasChats ? (
+      {!showListArea ? (
         <ScrollView style={[styles.content, styles.contentEmpty]} contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
           <View style={styles.emptyCenter}>
             <View style={styles.emptyTopBlock}>
@@ -320,7 +294,7 @@ export default function AILawyerScreen() {
             <View style={styles.emptyActionsWrap}>
               <TouchableOpacity
                 style={styles.startChatBtn}
-                onPress={handleStartChat}
+                onPress={() => handleStartChat()}
                 disabled={creating}
                 activeOpacity={0.8}
               >
@@ -335,7 +309,7 @@ export default function AILawyerScreen() {
                 <TouchableOpacity
                   key={i}
                   style={styles.promptCard}
-                  onPress={handleStartChat}
+                  onPress={() => handleStartChat(t(`aiLawyer.prompt${i}`))}
                   disabled={creating}
                   activeOpacity={0.7}
                 >
@@ -352,10 +326,14 @@ export default function AILawyerScreen() {
         <View style={styles.chatListWrap}>
           <ScrollView
             style={styles.content}
-            contentContainerStyle={[styles.listContent, { paddingBottom: 24 + 56 + spacing.md + 100 }]}
+            contentContainerStyle={[styles.listContent, { paddingBottom: 24 + 56 + spacing.md + (Platform.OS === 'android' ? 100 + 24 : 100) }]}
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
           >
-            {chats.map((chat) => {
+            {loading ? (
+              [1, 2, 3].map((key) => <SkeletonChatCard key={key} />)
+            ) : (
+              chats.map((chat) => {
             const last = lastMessages[chat.id];
             const preview = last?.content?.slice(0, 80) || '';
             const menuActions = [
@@ -399,7 +377,8 @@ export default function AILawyerScreen() {
                 </View>
               </View>
             );
-          })}
+          })
+            )}
           </ScrollView>
           <View style={styles.addChatBtnWrap}>
             <TouchableOpacity

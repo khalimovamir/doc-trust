@@ -19,11 +19,13 @@ import {
   PanResponder,
   Platform,
   Easing,
+  Keyboard,
 } from 'react-native';
 import { Paperclip, SendHorizontal, X, FileText, Scale, Shield } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme, fontFamily, spacing } from '../theme';
 import { useAuth } from '../context/AuthContext';
+import { useProfile } from '../context/ProfileContext';
 import { useAILawyerChat } from '../context/AILawyerChatContext';
 import { chat as chatApi } from '../lib/ai';
 import { getAppLanguageCode } from '../i18n';
@@ -38,11 +40,11 @@ import {
   uploadChatImage,
 } from '../lib/chat';
 
-export const ASSISTANT_GREETING = 'Hello! How can I help you with law and legal issues?';
+export const ASSISTANT_GREETING = 'Hello! How can I help you today?';
 const DEFAULT_SUGGESTIONS = [
-  { icon: Scale, text: 'What does this clause really mean?' },
-  { icon: FileText, text: 'Is this contract safe to sign?' },
-  { icon: Shield, text: 'Spot any legal risks here?' },
+  { icon: Scale, text: 'Explain this in simple terms' },
+  { icon: FileText, text: 'What are the key points?' },
+  { icon: Shield, text: 'What should I watch out for?' },
 ];
 
 function formatTime() {
@@ -299,7 +301,9 @@ export default function ChatView({ chatPrompt, chatContext }) {
   const { t } = useTranslation();
   const { colors, isDarkMode } = useTheme();
   const styles = useMemo(() => StyleSheet.create(createStyles(colors, isDarkMode)), [colors, isDarkMode]);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const { user } = useAuth();
+  const { profile } = useProfile();
   const { currentChatId, setCurrentChatId, wasCleared, setChatContext, refreshChatTrigger } = useAILawyerChat();
   const [loadedChatContext, setLoadedChatContext] = useState(null);
   /** Document context text from loaded chat (context_data) — sent to API as relatedContext, not shown in UI */
@@ -468,10 +472,7 @@ export default function ChatView({ chatPrompt, chatContext }) {
           setLoadedInitialSuggestions(null);
           setMessages([]);
           if (chatPrompt?.trim() && !cancelled) {
-            const created = await createChat(user.id, 'New chat', null);
-            await addChatMessage(created.id, 'assistant', ASSISTANT_GREETING);
-            setCurrentChatId(created.id);
-            setMessages([{ role: 'assistant', text: ASSISTANT_GREETING, time: formatTime() }]);
+            setInputText(chatPrompt.trim());
           }
         }
       } else {
@@ -512,19 +513,31 @@ export default function ChatView({ chatPrompt, chatContext }) {
   };
   sendRef.current = sendWithOptions;
   useEffect(() => {
-    if (chatPrompt?.trim() && !hasAutoSent.current && !loadingChat && !pendingContextText) {
-      hasAutoSent.current = true;
-      sendRef.current?.(chatPrompt.trim(), !currentChatId);
-    } else if (!chatPrompt) {
+    if (!chatPrompt) {
       hasAutoSent.current = false;
     }
-  }, [chatPrompt, loadingChat, pendingContextText, currentChatId]);
+  }, [chatPrompt]);
 
   useEffect(() => {
     if (scrollRef.current && messages.length > 0) {
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     }
   }, [messages]);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => setKeyboardHeight(e.endCoordinates.height)
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setKeyboardHeight(0)
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const activeContext = chatContext || loadedChatContext;
 
@@ -601,7 +614,10 @@ export default function ChatView({ chatPrompt, chatContext }) {
           ];
         }
       }
-      const chatOptions = { language: getAppLanguageCode() };
+      const chatOptions = {
+        language: getAppLanguageCode(),
+        jurisdiction: profile?.jurisdiction_code || 'US',
+      };
       if (contextTextToSend) chatOptions.relatedContext = contextTextToSend;
       if (imageToSend?.base64) chatOptions.imageBase64 = imageToSend.base64;
       const reply = await chatApi(historyForGemini, chatOptions);
@@ -637,13 +653,16 @@ export default function ChatView({ chatPrompt, chatContext }) {
       : DEFAULT_SUGGESTIONS;
 
   return (
-    <View style={styles.container}>
-      <ScrollView
-        ref={scrollRef}
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
+    <View style={[styles.keyboardAvoid, { paddingBottom: keyboardHeight }]}>
+      <View style={styles.container}>
+        <ScrollView
+          ref={scrollRef}
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
         {displayMessages.map((msg, i) =>
           msg.role === 'user' ? (
             <View key={i} style={styles.userBlock}>
@@ -809,12 +828,14 @@ export default function ChatView({ chatPrompt, chatContext }) {
         {error && <Text style={styles.errorText}>{error}</Text>}
       </View>
 
+      </View>
     </View>
   );
 }
 
 function createStyles(colors, isDarkMode) {
   return {
+    keyboardAvoid: { flex: 1, backgroundColor: colors.secondaryBackground },
     container: { flex: 1, backgroundColor: colors.secondaryBackground },
     scroll: { flex: 1 },
     scrollContent: {
@@ -1066,7 +1087,7 @@ function createStyles(colors, isDarkMode) {
       alignSelf: 'flex-start',
       gap: 10,
       borderRadius: 100,
-      backgroundColor: colors.primaryBackground,
+      backgroundColor: colors.alternate,
       borderWidth: 1,
       borderColor: colors.tertiary,
       paddingHorizontal: spacing.md,

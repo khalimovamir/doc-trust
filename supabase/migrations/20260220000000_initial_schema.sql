@@ -29,12 +29,12 @@ create policy "Users can update own profile"
   on public.profiles for update
   using (auth.uid() = id);
 
--- Trigger: create profile on signup
+-- Trigger: create profile on signup (full_name left empty; user can set it later in Edit Profile)
 create or replace function public.handle_new_user()
 returns trigger as $$
 begin
   insert into public.profiles (id, email, full_name)
-  values (new.id, new.email, new.raw_user_meta_data->>'full_name');
+  values (new.id, new.email, null);
   return new;
 end;
 $$ language plpgsql security definer;

@@ -16,7 +16,9 @@ import { CommonActions } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { fontFamily, spacing, useTheme } from '../theme';
+import { useProfile } from '../context/ProfileContext';
 import { compareDocuments } from '../lib/ai';
+import { getAppLanguageCode } from '../i18n';
 
 function createStyles(colors) {
   return {
@@ -31,6 +33,7 @@ function createStyles(colors) {
 export default function ComparingScreen({ navigation, route }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
+  const { profile } = useProfile();
   const styles = useMemo(() => StyleSheet.create(createStyles(colors)), [colors]);
   const document1Text = route.params?.document1Text || '';
   const document2Text = route.params?.document2Text || '';
@@ -45,7 +48,9 @@ export default function ComparingScreen({ navigation, route }) {
     let cancelled = false;
     const run = async () => {
       try {
-        const result = await compareDocuments(document1Text, document2Text);
+        const jurisdiction = profile?.jurisdiction_code || 'US';
+        const language = getAppLanguageCode();
+        const result = await compareDocuments(document1Text, document2Text, { jurisdiction, language });
         if (cancelled) return;
         navigation.dispatch(
           CommonActions.reset({

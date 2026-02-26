@@ -47,13 +47,18 @@ export async function analyzeDocument(documentText, options) {
  * Compare two documents
  * @param {string} document1 - Original document text
  * @param {string} document2 - Revised document text
+ * @param {{ jurisdiction?: string, language?: string }} [options]
  * @returns {Promise<Object>} { summary, differences }
  */
-export async function compareDocuments(document1, document2) {
+export async function compareDocuments(document1, document2, options = {}) {
+  const jurisdiction = options?.jurisdiction || 'US';
+  const language = options?.language || 'en';
   const { data, error } = await supabase.functions.invoke('compare-documents', {
     body: {
       document1: String(document1 || ''),
       document2: String(document2 || ''),
+      jurisdiction: String(jurisdiction),
+      language: String(language),
     },
   });
   if (error) throw new Error(getErrorMessage(error, data));
@@ -64,19 +69,21 @@ export async function compareDocuments(document1, document2) {
 /**
  * Chat with AI Lawyer
  * @param {Array<{role: 'user'|'assistant', text: string}>} messages - Chat history
- * @param {{ relatedContext?: string, imageBase64?: string, language?: string }} [options] - language: app locale for response
+ * @param {{ relatedContext?: string, imageBase64?: string, language?: string, jurisdiction?: string }} [options]
  * @returns {Promise<string>} Assistant reply text
  */
 export async function chat(messages, options) {
   const relatedContext = options?.relatedContext;
   const imageBase64 = options?.imageBase64;
   const language = options?.language || 'en';
+  const jurisdiction = options?.jurisdiction || 'US';
   const body = {
     messages: messages.map((m) => ({
       role: m.role,
       text: m.text || m.content || '',
     })),
     language: String(language),
+    jurisdiction: String(jurisdiction),
   };
   if (relatedContext) body.relatedContext = relatedContext;
   if (imageBase64) body.imageBase64 = imageBase64;

@@ -26,10 +26,11 @@ function HomeTabNavigatorInner() {
         tabBarActiveTintColor: colors?.primary ?? '#3b82f6',
         tabBarInactiveTintColor: colors?.secondaryText ?? '#6b7280',
         tabBarStyle: { backgroundColor: colors?.secondaryBackground ?? '#ffffff' },
+        // Keep tab screens mounted so content is not cleared when switching tabs
+        detachInactiveScreens: false,
         ...(Platform.OS === 'android' && {
           tabBarIconStyle: { width: 24, height: 24 },
           tabBarLabelVisibilityMode: 'labeled',
-          detachInactiveScreens: false,
         }),
       }}
     >

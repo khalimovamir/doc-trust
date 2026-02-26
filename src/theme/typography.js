@@ -5,12 +5,11 @@
 
 import { Platform } from 'react-native';
 
-// SF Pro is the default system font on iOS
-// On Android we use sans-serif (Roboto) - can be replaced with SF Pro font files if needed
+// iOS: SF Pro (system font family); Android: system sans-serif (Roboto)
 export const fontFamily = Platform.select({
-  ios: 'System',
+  ios: 'SF Pro',
   android: 'sans-serif',
-  default: 'System',
+  default: 'sans-serif',
 });
 
 export const typography = {

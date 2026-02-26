@@ -214,7 +214,8 @@ export default function ScannerScreen({ navigation }) {
 
   const checkGalleryPermission = useCallback(async () => {
     const { status } = await ImagePicker.getMediaLibraryPermissionsAsync();
-    setGalleryGranted(status === 'granted');
+    const mlStatus = await MediaLibrary.getPermissionsAsync();
+    setGalleryGranted(status === 'granted' && mlStatus.status === 'granted');
   }, [ImagePicker]);
 
   useEffect(() => {
@@ -228,8 +229,14 @@ export default function ScannerScreen({ navigation }) {
 
   const requestGalleryPermission = useCallback(async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    setGalleryGranted(status === 'granted');
     if (status !== 'granted') {
+      Alert.alert(t('common.error'), t('scanner.permissionGallery'));
+      setGalleryGranted(false);
+      return false;
+    }
+    const mlResult = await MediaLibrary.requestPermissionsAsync();
+    setGalleryGranted(mlResult.status === 'granted');
+    if (mlResult.status !== 'granted') {
       Alert.alert(t('common.error'), t('scanner.permissionGallery'));
       return false;
     }
@@ -301,8 +308,14 @@ export default function ScannerScreen({ navigation }) {
         sortBy: [[MediaLibrary.SortBy.creationTime, false]],
       });
       if (assets?.length > 0) {
-        const info = await MediaLibrary.getAssetInfoAsync(assets[0].id);
-        if (info?.localUri) setLastDevicePhotoUri(info.localUri);
+        const asset = assets[0];
+        let uri = null;
+        try {
+          const info = await MediaLibrary.getAssetInfoAsync(asset.id);
+          uri = info?.localUri ?? info?.uri ?? null;
+        } catch (_) {}
+        if (!uri && asset.uri) uri = asset.uri;
+        if (uri) setLastDevicePhotoUri(uri);
       }
     } catch (_) {
       // ignore

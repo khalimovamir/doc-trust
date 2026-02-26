@@ -12,7 +12,18 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const comparePrompt = `You are an expert legal analyst. Compare these two documents and return a JSON object (no markdown, no code blocks) with this structure:
+const LANGUAGE_NAMES: Record<string, string> = {
+  en: "English", ru: "Russian", es: "Spanish", de: "German", fr: "French",
+  it: "Italian", pt: "Portuguese", uk: "Ukrainian", pl: "Polish", tr: "Turkish",
+  zh: "Chinese", ja: "Japanese", ko: "Korean", ar: "Arabic", hi: "Hindi",
+};
+
+function buildComparePrompt(language: string, jurisdiction: string): string {
+  const langName = LANGUAGE_NAMES[language] || language || "English";
+  return `You are an expert legal analyst. The user's jurisdiction is: ${jurisdiction || "US"}. Consider it when assessing significance of changes.
+Write the entire JSON response (summary and all difference fields) in ${langName}. User's app language is ${language}.
+
+Compare these two documents and return a JSON object (no markdown, no code blocks) with this structure:
 
 {
   "summary": "Brief summary of main differences",
@@ -31,6 +42,7 @@ const comparePrompt = `You are an expert legal analyst. Compare these two docume
 
 Document 1 (original):
 `;
+}
 const doc2Label = `
 
 Document 2 (revised):
@@ -67,13 +79,16 @@ serve(async (req) => {
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const { document1, document2 } = await req.json();
+    const { document1, document2, language, jurisdiction } = await req.json();
     if (!document1 || !document2) {
       return new Response(
         JSON.stringify({ error: "document1 and document2 required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+    const languageStr = typeof language === "string" ? String(language).trim().toLowerCase() || "en" : "en";
+    const jurisdictionStr = typeof jurisdiction === "string" ? String(jurisdiction).trim() || "US" : "US";
+    const comparePrompt = buildComparePrompt(languageStr, jurisdictionStr);
     const fullPrompt = comparePrompt + document1.slice(0, 60000) + doc2Label + document2.slice(0, 60000);
     const raw = await callGemini(apiKey, fullPrompt);
     const jsonStr = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();

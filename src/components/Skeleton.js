@@ -57,7 +57,7 @@ export default function Skeleton({ width, height, borderRadius = 8, style, child
 }
 
 /**
- * Preset: skeleton for a list card (left circle + right lines) — e.g. History
+ * Preset: skeleton for a list card (left circle + right lines) — generic fallback
  */
 export function SkeletonCard({ style, circleSize = 56, lineWidths = ['80%', '60%', '40%'] }) {
   const { colors } = useTheme();
@@ -68,6 +68,47 @@ export function SkeletonCard({ style, circleSize = 56, lineWidths = ['80%', '60%
         {lineWidths.map((w, i) => (
           <Skeleton key={i} height={i === 0 ? 16 : 12} width={w} style={i === 0 ? styles.cardTitle : styles.cardLine} />
         ))}
+      </View>
+    </View>
+  );
+}
+
+/**
+ * Preset: skeleton for History / Recent Scans cards — same structure as real card:
+ * left: 56px circle, right: title line + two rows of tag pills + date line
+ */
+export function SkeletonScanOrHistoryCard({ style }) {
+  const { colors } = useTheme();
+  const cardStyle = {
+    flexDirection: 'row',
+    backgroundColor: colors.secondaryBackground,
+    borderRadius: 20,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.tertiary,
+  };
+  const leftStyle = { marginRight: spacing.md };
+  const contentStyle = { flex: 1 };
+  const titleStyle = { marginBottom: spacing.xs };
+  const tagsRowStyle = {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginBottom: spacing.xs,
+  };
+  return (
+    <View style={[cardStyle, style]}>
+      <Skeleton width={56} height={56} borderRadius={28} style={leftStyle} />
+      <View style={contentStyle}>
+        <Skeleton height={16} width="85%" borderRadius={6} style={titleStyle} />
+        <View style={tagsRowStyle}>
+          <Skeleton height={28} width={72} borderRadius={8} />
+          <Skeleton height={28} width={56} borderRadius={8} />
+          <Skeleton height={28} width={64} borderRadius={8} />
+          <Skeleton height={28} width={78} borderRadius={8} />
+        </View>
+        <Skeleton height={12} width="35%" borderRadius={6} />
       </View>
     </View>
   );

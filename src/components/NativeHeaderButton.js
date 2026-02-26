@@ -47,7 +47,7 @@ export function NativeHeaderButtonBack({ onPress }) {
   );
 }
 
-/** Кнопка «i» в шапке — круглая, как кнопка «назад». Фиксированный квадрат 44×44, чтобы app bar не растягивал в овал. */
+/** Кнопка «i» в шапке — круглая на iOS; на Android — как кнопка «назад» (wrap). */
 export function NativeHeaderButtonInfo({ onPress, iconSize = ICON_SIZE }) {
   const { colors } = useTheme();
   const tint = colors.primaryText;
@@ -66,13 +66,24 @@ export function NativeHeaderButtonInfo({ onPress, iconSize = ICON_SIZE }) {
         return <Info size={iconSize} color={tint} strokeWidth={2} />;
       })()
     );
+  if (Platform.OS === 'android') {
+    return (
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => [styles.wrapRightAndroid, pressed && styles.pressed]}
+        hitSlop={8}
+        android_ripple={{ color: 'rgba(0,0,0,0.1)', borderless: true }}
+      >
+        {content}
+      </Pressable>
+    );
+  }
   return (
     <View style={styles.circleWrap}>
       <Pressable
         onPress={onPress}
         style={({ pressed }) => [styles.circlePressable, pressed && styles.pressed]}
         hitSlop={8}
-        android_ripple={Platform.OS === 'android' ? { color: 'rgba(0,0,0,0.1)', borderless: true } : undefined}
       >
         {content}
       </Pressable>
@@ -80,7 +91,7 @@ export function NativeHeaderButtonInfo({ onPress, iconSize = ICON_SIZE }) {
   );
 }
 
-/** Кнопка меню: круглая 44×44, иконка SF Symbol "ellipsis" (iOS) / Material more-vert (Android). */
+/** Кнопка меню: круглая 44×44 на iOS; на Android — как кнопка «назад» (wrap, без круга). */
 export function NativeHeaderButtonEllipsis({ iconSize = 24 }) {
   const { colors } = useTheme();
   const tint = colors.primaryText;
@@ -95,10 +106,13 @@ export function NativeHeaderButtonEllipsis({ iconSize = 24 }) {
       />
     ) : (
       (() => {
-        const { MaterialIcons } = require('@expo/vector-icons');
-        return <MaterialIcons name="more-vert" size={iconSize} color={tint} />;
+        const { MoreVertical } = require('lucide-react-native');
+        return <MoreVertical size={iconSize} color={tint} strokeWidth={2} />;
       })()
     );
+  if (Platform.OS === 'android') {
+    return <View style={styles.wrapRightAndroid}>{content}</View>;
+  }
   return (
     <View style={styles.circleWrap}>
       <View style={styles.circlePressable}>{content}</View>
@@ -108,6 +122,16 @@ export function NativeHeaderButtonEllipsis({ iconSize = 24 }) {
 
 const styles = StyleSheet.create({
   wrap: {
+    minWidth: MIN_TOUCH_SIZE,
+    minHeight: MIN_TOUCH_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  /** На Android правые кнопки — тот же размер 44×44 и выравнивание, что и кнопка «назад». */
+  wrapRightAndroid: {
+    width: MIN_TOUCH_SIZE,
+    height: MIN_TOUCH_SIZE,
     minWidth: MIN_TOUCH_SIZE,
     minHeight: MIN_TOUCH_SIZE,
     alignItems: 'center',

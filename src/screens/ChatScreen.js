@@ -11,12 +11,12 @@ import { NativeHeaderButtonEllipsis } from '../components/NativeHeaderButton';
 import { useAILawyerChat } from '../context/AILawyerChatContext';
 import { useTheme } from '../theme';
 import ChatView from '../components/ChatView';
-import { deleteMessagesExceptFirst } from '../lib/chat';
+import { deleteChat } from '../lib/chat';
 
 export default function ChatScreen({ navigation }) {
   const { t } = useTranslation();
   const { colors, isDarkMode } = useTheme();
-  const { chatPrompt, chatContext, currentChatId, setRefreshChatTrigger } = useAILawyerChat();
+  const { chatPrompt, chatContext, currentChatId, setRefreshChatTrigger, clearChat } = useAILawyerChat();
   const currentChatIdRef = useRef(currentChatId);
   currentChatIdRef.current = currentChatId;
   const setRefreshChatTriggerRef = useRef(setRefreshChatTrigger);
@@ -38,17 +38,19 @@ export default function ChatScreen({ navigation }) {
     const chatId = currentChatIdRef.current;
     if (nativeEvent.event === 'clear' && chatId) {
       Alert.alert(
-        t('aiLawyer.clearChatTitle'),
-        t('aiLawyer.clearChatMessage'),
+        t('aiLawyer.deleteChatTitle'),
+        t('aiLawyer.deleteChatMessage'),
         [
           { text: t('common.cancel'), style: 'cancel' },
           {
-            text: t('aiLawyer.clearChatConfirm'),
+            text: t('aiLawyer.deleteChatConfirm'),
             style: 'destructive',
             onPress: async () => {
               try {
-                await deleteMessagesExceptFirst(chatId);
+                await deleteChat(chatId);
+                clearChat();
                 setRefreshChatTriggerRef.current((prev) => prev + 1);
+                navigation.goBack();
               } catch (_) {}
             },
           },
@@ -71,7 +73,7 @@ export default function ChatScreen({ navigation }) {
           </MenuView>
         </View>
       ),
-      headerRightContainerStyle: { width: 44, height: 44, maxWidth: 44, maxHeight: 44, flexGrow: 0, flexShrink: 0 },
+      headerRightContainerStyle: { width: 44, height: 44, maxWidth: 44, maxHeight: 44, flexGrow: 0, flexShrink: 0, justifyContent: 'center', alignItems: 'center', ...(Platform.OS === 'android' && { paddingRight: 16 }) },
     });
   }, [navigation, t, chatMenuActions, colors, isDarkMode]);
 

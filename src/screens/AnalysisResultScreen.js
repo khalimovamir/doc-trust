@@ -254,7 +254,7 @@ export default function AnalysisResultScreen({ navigation, route }) {
           </MenuView>
         </View>
       ),
-      headerRightContainerStyle: { width: 44, height: 44, maxWidth: 44, maxHeight: 44, flexGrow: 0, flexShrink: 0 },
+      headerRightContainerStyle: { width: 44, height: 44, maxWidth: 44, maxHeight: 44, flexGrow: 0, flexShrink: 0, justifyContent: 'center', alignItems: 'center', ...(Platform.OS === 'android' && { paddingRight: 16 }) },
     });
   }, [navigation, colors, menuActions, isDarkMode]);
 

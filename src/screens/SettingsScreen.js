@@ -110,9 +110,9 @@ export default function SettingsScreen({ navigation }) {
               </View>
             )}
             <View style={styles.profileTextCol}>
-              {!!profile?.full_name?.trim() && (
-                <Text style={styles.profileName}>{profile.full_name}</Text>
-              )}
+              <Text style={styles.profileName}>
+                {profile?.full_name?.trim() || t('settings.profileCardTitle')}
+              </Text>
               <Text style={styles.profileEmail}>
                 {profile?.email || '—'}
               </Text>
@@ -196,7 +196,7 @@ export default function SettingsScreen({ navigation }) {
                 value={isDarkMode}
                 onValueChange={setDarkMode}
                 trackColor={{ false: colors.tertiary, true: '#34c759' }}
-                thumbColor={colors.secondaryBackground}
+                thumbColor={Platform.OS === 'android' && isDarkMode ? '#ffffff' : colors.secondaryBackground}
                 ios_backgroundColor={colors.tertiary}
               />
             }
