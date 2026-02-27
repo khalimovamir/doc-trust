@@ -36,7 +36,6 @@ import {
   getMostRecentChat,
   getChatMessages,
   addChatMessage,
-  updateChatTitle,
   uploadChatImage,
 } from '../lib/chat';
 
@@ -304,7 +303,7 @@ export default function ChatView({ chatPrompt, chatContext }) {
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const { user } = useAuth();
   const { profile } = useProfile();
-  const { currentChatId, setCurrentChatId, wasCleared, setChatContext, refreshChatTrigger } = useAILawyerChat();
+  const { currentChatId, setCurrentChatId, wasCleared, setChatContext, setChatPrompt, refreshChatTrigger } = useAILawyerChat();
   const [loadedChatContext, setLoadedChatContext] = useState(null);
   /** Document context text from loaded chat (context_data) — sent to API as relatedContext, not shown in UI */
   const [loadedDocumentContextText, setLoadedDocumentContextText] = useState(null);
@@ -428,7 +427,7 @@ export default function ChatView({ chatPrompt, chatContext }) {
               : null
           );
           const ctxData = chat?.context_data;
-          const docText = ctxData?.contextText ?? (ctxData?.summary ? `${ctxData.documentType || 'Document'}\n\n${ctxData.summary}` : null);
+          const docText = ctxData?.fullDocumentContextText ?? ctxData?.contextText ?? (ctxData?.summary ? `${ctxData.documentType || 'Document'}\n\n${ctxData.summary}` : null);
           setLoadedDocumentContextText(docText || null);
           setLoadedInitialSuggestions(Array.isArray(ctxData?.initial_suggestions) && ctxData.initial_suggestions.length >= 3 ? ctxData.initial_suggestions : null);
           setMessages(
@@ -453,7 +452,7 @@ export default function ChatView({ chatPrompt, chatContext }) {
                 : null
             );
             const ctxData = recent?.context_data;
-            const docText = ctxData?.contextText ?? (ctxData?.summary ? `${ctxData.documentType || 'Document'}\n\n${ctxData.summary}` : null);
+            const docText = ctxData?.fullDocumentContextText ?? ctxData?.contextText ?? (ctxData?.summary ? `${ctxData.documentType || 'Document'}\n\n${ctxData.summary}` : null);
             setLoadedDocumentContextText(docText || null);
             setLoadedInitialSuggestions(Array.isArray(ctxData?.initial_suggestions) && ctxData.initial_suggestions.length >= 3 ? ctxData.initial_suggestions : null);
             setMessages(
@@ -486,6 +485,13 @@ export default function ChatView({ chatPrompt, chatContext }) {
     load();
     return () => { cancelled = true; };
   }, [user?.id, currentChatId, wasCleared, chatPrompt]);
+
+  useEffect(() => {
+    if (chatPrompt?.trim()) {
+      setInputText(chatPrompt.trim());
+      setChatPrompt('');
+    }
+  }, [chatPrompt]);
 
   useEffect(() => {
     if (!currentChatId || !user?.id || refreshChatTrigger === 0) return;
@@ -571,7 +577,8 @@ export default function ChatView({ chatPrompt, chatContext }) {
                 context_data: { ...ctx.data, ref: ctx.ref },
               }
             : null;
-        const created = await createChat(user.id, trimmed.slice(0, 50), chatContextForDb);
+        const initialTitle = chatContextForDb?.context_title || t('aiLawyer.addNewChat');
+        const created = await createChat(user.id, initialTitle, chatContextForDb);
         cid = created.id;
         setCurrentChatId(cid);
         if (ctx) setLoadedChatContext({ title: ctx.title, ref: ctx.ref });
@@ -580,8 +587,6 @@ export default function ChatView({ chatPrompt, chatContext }) {
           { id: greetingAdded.id, role: 'assistant', text: ASSISTANT_GREETING, time: formatTime() },
           ...prev,
         ]);
-      } else {
-        await updateChatTitle(cid, trimmed.slice(0, 50));
       }
       let imageUrl = null;
       if (imageToSend) {
@@ -790,10 +795,10 @@ export default function ChatView({ chatPrompt, chatContext }) {
           <TouchableOpacity style={styles.attachBtn} onPress={pickImage} activeOpacity={0.8}>
             <Paperclip size={22} color={colors.secondaryText} strokeWidth={2} />
           </TouchableOpacity>
-          <View style={styles.composerStack}>
-            <View style={styles.inputWrap}>
+          <View style={styles.composerCard}>
+            <View style={styles.composerCardRow}>
               <TextInput
-                style={styles.input}
+                style={styles.composerCardInput}
                 value={inputText}
                 onChangeText={setInputText}
                 placeholder={t('chat.placeholder')}
@@ -804,11 +809,13 @@ export default function ChatView({ chatPrompt, chatContext }) {
                 editable={!loading}
                 onSubmitEditing={() => sendMessage()}
                 returnKeyType="send"
+                blurOnSubmit={false}
                 textAlignVertical="top"
+                {...(Platform.OS === 'android' && { includeFontPadding: false })}
               />
               <TouchableOpacity
                 style={[
-                  styles.sendBtn,
+                  styles.composerCardBtn,
                   inputText.trim() && styles.sendBtnFilled,
                   loading && styles.sendBtnDisabled,
                 ]}
@@ -1121,16 +1128,56 @@ function createStyles(colors, isDarkMode) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    inputWrap: {
+    composerCard: {
       flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
       minHeight: 52,
-      borderRadius: 26,
+      maxHeight: 140,
       backgroundColor: colors.alternate,
+      borderRadius: 26,
       borderWidth: 1,
       borderColor: colors.tertiary,
       overflow: 'hidden',
+      justifyContent: 'flex-end',
+    },
+    composerCardRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      minHeight: 52,
+      paddingTop: 4,
+      paddingBottom: 4,
+      paddingLeft: 8,
+      paddingRight: 4,
+    },
+    composerCardInput: {
+      flex: 1,
+      minWidth: 0,
+      fontFamily: fontFamily,
+      fontSize: 16,
+      lineHeight: 22,
+      color: colors.primaryText,
+      paddingTop: 10,
+      paddingBottom: 10,
+      paddingLeft: 8,
+      paddingRight: 8,
+      minHeight: 44,
+      maxHeight: 112,
+    },
+    composerCardBtn: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: colors.tertiary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginLeft: 4,
+    },
+    inputWrap: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      height: 52,
+      minHeight: 52,
+      maxHeight: 52,
     },
     input: {
       flex: 1,
@@ -1143,20 +1190,20 @@ function createStyles(colors, isDarkMode) {
       paddingTop: 16,
       paddingRight: 12,
       paddingBottom: 16,
+      height: 52,
       minHeight: 52,
-      maxHeight: 52 + 5 * 20,
+      maxHeight: 52,
     },
     sendBtn: {
-      width: 46,
-      height: 46,
-      borderRadius: 26,
+      width: 44,
+      height: 44,
+      borderRadius: 22,
       borderWidth: 1,
       borderColor: colors.tertiary,
       backgroundColor: colors.tertiary,
       alignItems: 'center',
       justifyContent: 'center',
       marginLeft: 0,
-      marginTop: 3,
       marginRight: 3,
       marginBottom: 3,
     },

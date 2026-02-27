@@ -709,36 +709,21 @@ export default function DetailsScreen({ navigation, route }) {
   const criticalCount = redFlags.filter((r) => r.type === 'critical').length;
   const warningCount = redFlags.filter((r) => r.type === 'warning').length;
 
-  const menuActions = React.useMemo(
-    () => [
-      {
-        id: 'share',
-        title: t('details.share'),
-        image: Platform.select({ ios: 'square.and.arrow.up', android: 'ic_menu_share' }),
-        imageColor: Platform.select({ ios: colors.primaryText, android: colors.primaryText }),
-      },
-      {
-        id: 'export',
-        title: t('details.exportPdf'),
-        image: Platform.select({ ios: 'square.and.arrow.down', android: 'ic_menu_save' }),
-        imageColor: Platform.select({ ios: colors.primaryText, android: colors.primaryText }),
-      },
-      {
-        id: 'compare',
-        title: t('details.compare'),
-        image: Platform.select({ ios: 'doc.on.doc', android: 'ic_menu_agenda' }),
-        imageColor: Platform.select({ ios: colors.primaryText, android: colors.primaryText }),
-      },
-      {
-        id: 'delete',
-        title: t('details.delete'),
-        attributes: { destructive: true },
-        image: Platform.select({ ios: 'trash', android: 'ic_menu_delete' }),
-        imageColor: Platform.select({ ios: '#ff3b30', android: '#ff3b30' }),
-      },
-    ],
-    [t, colors.primaryText]
-  );
+  const menuActions = React.useMemo(() => {
+    const share = { id: 'share', title: t('details.share') };
+    const exportPdf = { id: 'export', title: t('details.exportPdf') };
+    const compare = { id: 'compare', title: t('details.compare') };
+    const del = { id: 'delete', title: t('details.delete'), attributes: { destructive: true } };
+    if (Platform.OS === 'android') {
+      return [share, exportPdf, compare, del];
+    }
+    return [
+      { ...share, image: 'square.and.arrow.up', imageColor: colors.primaryText },
+      { ...exportPdf, image: 'square.and.arrow.down', imageColor: colors.primaryText },
+      { ...compare, image: 'doc.on.doc', imageColor: colors.primaryText },
+      { ...del, image: 'trash', imageColor: '#ff3b30' },
+    ];
+  }, [t, colors.primaryText]);
 
   const handleConfirmDelete = async () => {
     const id = analysisId || analysisRef.current?.id;
@@ -807,12 +792,48 @@ export default function DetailsScreen({ navigation, route }) {
   const { user } = useAuth();
   const { setCurrentChatId, setChatContext, setRefreshChatTrigger } = useAILawyerChat();
 
+  const buildFullDocumentContextText = useCallback((anal, issueItem = null) => {
+    if (!anal) return '';
+    const docTitle = anal.documentType || anal.title || 'Document Analysis';
+    const parts = [`Document: ${docTitle}`, ''];
+    if (anal.summary) {
+      parts.push('Summary:', String(anal.summary).trim(), '');
+    }
+    const flags = anal.redFlags || [];
+    if (flags.length > 0) {
+      parts.push('Issues / Red flags:');
+      flags.forEach((f, i) => {
+        parts.push(`${i + 1}. [${f.type || 'issue'}] ${f.title || 'Issue'}`);
+        if (f.section) parts.push(`   Section: ${f.section}`);
+        if (f.whyMatters) parts.push(`   Why it matters: ${f.whyMatters}`);
+        if (f.whatToDo) parts.push(`   What to do: ${f.whatToDo}`);
+        parts.push('');
+      });
+    }
+    const guidanceItems = anal.guidance || [];
+    if (guidanceItems.length > 0) {
+      parts.push('Guidance:');
+      guidanceItems.forEach((g, i) => {
+        parts.push(`${i + 1}. ${g.text || ''}`);
+        if (g.section) parts.push(`   Section: ${g.section}`);
+        parts.push('');
+      });
+    }
+    if (issueItem) {
+      parts.push('--- Current focus (user may refer to "this issue" or "the first error") ---');
+      parts.push(`Issue: ${issueItem.title}`);
+      if (issueItem.whyMatters) parts.push(`Why it matters: ${issueItem.whyMatters}`);
+      if (issueItem.whatToDo) parts.push(`What to do: ${issueItem.whatToDo}`);
+    }
+    return parts.filter(Boolean).join('\n');
+  }, []);
+
   const handleAskAI = async (issueItem) => {
     if (!user?.id) return;
     const docInitial = getDocumentChatInitial(analysis, issueItem ?? null, t);
+    const fullContextText = buildFullDocumentContextText(analysis, issueItem ?? null);
     let context;
     if (issueItem) {
-      const copyText = [issueItem.title, '', 'Why this matters:', issueItem.whyMatters || '', '', 'What to do:', issueItem.whatToDo || ''].filter(Boolean).join('\n');
       context = {
         source: 'details',
         type: 'issue',
@@ -824,31 +845,33 @@ export default function DetailsScreen({ navigation, route }) {
           summary: analysis?.summary,
           documentType: analysis?.documentType,
           redFlags: analysis?.redFlags,
-          contextText: copyText,
+          guidance: analysis?.guidance,
+          fullDocumentContextText: fullContextText,
+          contextText: fullContextText,
           initial_message: docInitial.initial_message,
           initial_suggestions: docInitial.initial_suggestions,
         },
-        contextText: copyText,
+        contextText: fullContextText,
       };
     } else {
       const docTitle = analysis?.documentType || title || 'Document Analysis';
-      const summary = analysis?.summary || '';
-      const contextText = summary ? `${docTitle}\n\n${summary.slice(0, 300)}${summary.length > 300 ? '...' : ''}` : docTitle;
       context = {
         source: 'details',
         type: 'document',
         title: docTitle,
         ref: analysis?.id || `doc-${(analysis?.documentType || 'doc').replace(/\s+/g, '-').slice(0, 30)}`,
         data: {
-          summary,
+          summary: analysis?.summary,
           documentType: analysis?.documentType,
           redFlags: analysis?.redFlags,
+          guidance: analysis?.guidance,
           analysisId: analysis?.id,
-          contextText,
+          fullDocumentContextText: fullContextText,
+          contextText: fullContextText,
           initial_message: docInitial.initial_message,
           initial_suggestions: docInitial.initial_suggestions,
         },
-        contextText,
+        contextText: fullContextText,
       };
     }
     try {
@@ -881,16 +904,37 @@ export default function DetailsScreen({ navigation, route }) {
       headerTitleStyle: { fontSize: 20, fontWeight: Platform.OS === 'android' ? '800' : '600', marginTop: 4, color: colors.primaryText },
       headerTintColor: colors.primaryText,
       // Резерв места под кнопку; сама кнопка рендерится overlay’ем ниже — так она не растягивается App Bar (как на Upload File).
-      headerRight: () => (
-        <View style={styles.menuButtonWrap}>
-          <MenuView onPressAction={handleMenuAction} actions={menuActions} themeVariant={isDarkMode ? 'dark' : 'light'} style={styles.menuButtonWrap}>
-            <NativeHeaderButtonEllipsis iconSize={24} />
-          </MenuView>
-        </View>
-      ),
-      headerRightContainerStyle: { width: 44, height: 44, maxWidth: 44, maxHeight: 44, flexGrow: 0, flexShrink: 0, justifyContent: 'center', alignItems: 'center', ...(Platform.OS === 'android' && { paddingRight: 16 }) },
+      ...(Platform.OS === 'ios'
+        ? {
+            unstable_headerRightItems: () => [
+              {
+                type: 'menu',
+                label: t('details.menuOptions'),
+                icon: { type: 'sfSymbol', name: 'ellipsis' },
+                menu: {
+                  title: '',
+                  items: [
+                    { type: 'action', label: t('details.share'), icon: { type: 'sfSymbol', name: 'square.and.arrow.up' }, onPress: () => menuActionRef.current('share') },
+                    { type: 'action', label: t('details.exportPdf'), icon: { type: 'sfSymbol', name: 'square.and.arrow.down' }, onPress: () => menuActionRef.current('export') },
+                    { type: 'action', label: t('details.compare'), icon: { type: 'sfSymbol', name: 'doc.on.doc' }, onPress: () => menuActionRef.current('compare') },
+                    { type: 'action', label: t('details.delete'), icon: { type: 'sfSymbol', name: 'trash' }, destructive: true, onPress: () => menuActionRef.current('delete') },
+                  ],
+                },
+              },
+            ],
+          }
+        : {
+            headerRight: () => (
+              <View style={styles.menuButtonWrap}>
+                <MenuView onPressAction={handleMenuAction} actions={menuActions} themeVariant={isDarkMode ? 'dark' : 'light'} style={styles.menuButtonWrap}>
+                  <NativeHeaderButtonEllipsis iconSize={24} />
+                </MenuView>
+              </View>
+            ),
+            headerRightContainerStyle: { width: 44, height: 44, maxWidth: 44, maxHeight: 44, flexGrow: 0, flexShrink: 0, justifyContent: 'center', alignItems: 'center', paddingRight: 16 },
+          }),
     });
-  }, [navigation, menuActions, colors, isDarkMode]);
+  }, [navigation, menuActions, colors, isDarkMode, t]);
 
   const filteredIssues =
     activeFilter === 'all'
@@ -1063,6 +1107,11 @@ function createStyles(colors) {
     minHeight: 44,
     maxWidth: 44,
     maxHeight: 44,
+    flexGrow: 0,
+    flexShrink: 0,
+    alignSelf: 'center',
+    borderRadius: 22,
+    overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
   },

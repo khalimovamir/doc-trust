@@ -97,3 +97,19 @@ export async function toggleVote(featureRequestId, userId) {
   });
   return 'added';
 }
+
+/**
+ * Delete a feature request. Only the author (user_id) can delete.
+ * @param {string} featureRequestId
+ * @param {string} userId
+ * @returns {Promise<void>}
+ */
+export async function deleteFeatureRequest(featureRequestId, userId) {
+  const { error } = await supabase
+    .from('feature_requests')
+    .delete()
+    .eq('id', featureRequestId)
+    .eq('user_id', userId);
+
+  if (error) throw error;
+}

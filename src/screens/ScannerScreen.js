@@ -13,12 +13,15 @@ import {
   Alert,
   ScrollView,
   Animated,
+  Modal,
+  Dimensions,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useFocusEffect } from '@react-navigation/native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as MediaLibrary from 'expo-media-library';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { BlurView } from 'expo-blur';
 import { X, Plus, ChevronLeft, Check, Info, FileScan, Zap } from 'lucide-react-native';
 import { fontFamily, spacing, useTheme } from '../theme';
 import IconButton from '../components/IconButton';
@@ -26,6 +29,13 @@ import IconButton from '../components/IconButton';
 const MAX_SCANS = 20;
 const CARD_SIZE = 56;
 const GALLERY_THUMB_SIZE = 52;
+
+const GUIDE_IMAGES = [
+  require('../../assets/scan-guide-1.png'),
+  require('../../assets/scan-guide-2.png'),
+  require('../../assets/scan-guide-3.png'),
+  require('../../assets/scan-guide-4.png'),
+];
 
 function createStyles(colors) {
   return {
@@ -51,7 +61,7 @@ function createStyles(colors) {
       width: 52,
       height: 52,
       borderRadius: 26,
-      backgroundColor: 'rgba(255,255,255,0.15)',
+      backgroundColor: 'rgba(0,0,0,0.3)',
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -150,15 +160,10 @@ function createStyles(colors) {
       width: GALLERY_THUMB_SIZE,
       height: GALLERY_THUMB_SIZE,
       borderRadius: GALLERY_THUMB_SIZE / 2,
-      backgroundColor: 'rgba(255,255,255,0.15)',
-      borderWidth: 1.5,
-      borderColor: 'rgba(255,255,255,0.3)',
+      backgroundColor: colors.primary,
+      borderWidth: 0,
       alignItems: 'center',
       justifyContent: 'center',
-    },
-    checkButtonActive: {
-      backgroundColor: colors.accent2,
-      borderColor: colors.success,
     },
     permissionButtonText: { fontFamily, fontSize: 16, fontWeight: '600', color: '#ffffff' },
     errorBanner: {
@@ -184,6 +189,76 @@ function createStyles(colors) {
       justifyContent: 'center',
     },
     scanningBannerText: { fontFamily, fontSize: 15, fontWeight: '600', color: '#fff' },
+    guideOverlay: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+    },
+    guideOverlayDark: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0,0,0,0.4)',
+    },
+    guideCard: {
+      width: '100%',
+      maxWidth: Dimensions.get('window').width - 32,
+      height: 470,
+      borderRadius: 24,
+      overflow: 'hidden',
+      paddingTop: 32,
+      paddingBottom: 20,
+      paddingHorizontal: 0,
+    },
+    guideCardBlur: {
+      ...StyleSheet.absoluteFillObject,
+      borderRadius: 24,
+    },
+    guideCardTint: {
+      ...StyleSheet.absoluteFillObject,
+      borderRadius: 24,
+      backgroundColor: 'rgba(58,58,62,0.92)',
+    },
+    guideScrollWrap: {
+      width: '100%',
+      flex: 1,
+    },
+    guideScroll: {
+      width: Dimensions.get('window').width - 32,
+    },
+    guideSlide: {
+      width: Dimensions.get('window').width - 32,
+      paddingHorizontal: 20,
+      flex: 1,
+      flexDirection: 'column',
+    },
+    guideSlideColumn: {
+      flex: 1,
+      flexDirection: 'column',
+    },
+    guideTitle: {
+      fontFamily,
+      fontSize: 24,
+      fontWeight: '800',
+      color: '#ffffff',
+      textAlign: 'center',
+    },
+    guideDesc: {
+      fontFamily,
+      fontSize: 14,
+      color: 'rgba(255,255,255,0.5)',
+      textAlign: 'center',
+      marginTop: 14,
+    },
+    guideImageWrap: {
+      height: 160,
+    },
+    guideImage: { width: '100%', height: 180, resizeMode: 'contain' },
+    guideDots: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 24, gap: 8 },
+    guideDot: { width: 8, height: 8, borderRadius: 4 },
+    guideDotActive: { backgroundColor: '#ffffff' },
+    guideDotInactive: { backgroundColor: 'rgba(255,255,255,0.5)' },
+    guideButton: { marginTop: 36, marginHorizontal: 20, height: 56, borderRadius: 28, backgroundColor: '#ffffff', alignItems: 'center', justifyContent: 'center' },
+    guideButtonText: { fontFamily, fontSize: 16, fontWeight: '600', color: '#000000' },
   };
 }
 
@@ -203,6 +278,12 @@ export default function ScannerScreen({ navigation }) {
   const [error, setError] = useState('');
   const [galleryGranted, setGalleryGranted] = useState(null);
   const [torchOn, setTorchOn] = useState(false);
+  const [infoGuideVisible, setInfoGuideVisible] = useState(false);
+  const [guideSlideIndex, setGuideSlideIndex] = useState(0);
+  const guideScrollRef = useRef(null);
+  const screenWidth = Dimensions.get('window').width;
+  const guideCardWidth = screenWidth - 32;
+  const guideSlideWidth = guideCardWidth;
 
   const ImagePicker = useMemo(() => require('expo-image-picker'), []);
 
@@ -341,13 +422,21 @@ export default function ScannerScreen({ navigation }) {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: false,
+      allowsMultipleSelection: true,
       quality: 0.9,
     });
-    if (result.canceled || !result.assets?.[0]?.uri) return;
-    const asset = result.assets[0];
-    setLastGalleryUri(asset.uri);
-    addScanAt(asset.uri, asset.mimeType || 'image/jpeg', targetSlotIndex);
-  }, [scans.length, slotCount, requestGalleryPermission, addScanAt, targetSlotIndex, ImagePicker]);
+    if (result.canceled || !result.assets?.length) return;
+    const assets = result.assets;
+    if (assets.length === 1) {
+      const asset = assets[0];
+      setLastGalleryUri(asset.uri);
+      addScanAt(asset.uri, asset.mimeType || 'image/jpeg', targetSlotIndex);
+    } else {
+      const images = assets.map((a) => ({ uri: a.uri, type: a.mimeType || 'image/jpeg' }));
+      addScansAt(images, targetSlotIndex);
+      if (assets[0]?.uri) setLastGalleryUri(assets[0].uri);
+    }
+  }, [scans.length, slotCount, requestGalleryPermission, addScanAt, addScansAt, targetSlotIndex, ImagePicker]);
 
   const handleStartAnalyzing = useCallback(() => {
     if (scans.length === 0) return;
@@ -362,8 +451,93 @@ export default function ScannerScreen({ navigation }) {
   const hasScans = scans.length > 0;
   const selectedScan = scans[targetSlotIndex];
 
+  const guideSlides = useMemo(
+    () => [
+      { titleKey: 'scanner.guide1Title', descKey: 'scanner.guide1Desc', image: GUIDE_IMAGES[0] },
+      { titleKey: 'scanner.guide2Title', descKey: 'scanner.guide2Desc', image: GUIDE_IMAGES[1] },
+      { titleKey: 'scanner.guide3Title', descKey: 'scanner.guide3Desc', image: GUIDE_IMAGES[2] },
+      { titleKey: 'scanner.guide4Title', descKey: 'scanner.guide4Desc', image: GUIDE_IMAGES[3] },
+    ],
+    []
+  );
+
+  const onGuideScroll = useCallback(
+    (e) => {
+      const x = e.nativeEvent.contentOffset.x;
+      const index = Math.round(x / guideSlideWidth);
+      setGuideSlideIndex(Math.min(3, Math.max(0, index)));
+    },
+    [guideSlideWidth]
+  );
+
+  useEffect(() => {
+    if (infoGuideVisible && guideScrollRef.current) {
+      guideScrollRef.current.scrollTo({ x: 0, animated: false });
+    }
+  }, [infoGuideVisible]);
+
+  const onGuideNext = useCallback(() => {
+    if (guideSlideIndex >= 3) {
+      setInfoGuideVisible(false);
+      setGuideSlideIndex(0);
+      return;
+    }
+    const next = guideSlideIndex + 1;
+    setGuideSlideIndex(next);
+    guideScrollRef.current?.scrollTo({ x: next * guideSlideWidth, animated: true });
+  }, [guideSlideIndex, guideSlideWidth]);
+
   return (
     <View style={styles.container}>
+      <Modal visible={infoGuideVisible} transparent animationType="fade">
+        <View style={styles.guideOverlay}>
+          <View style={styles.guideOverlayDark} pointerEvents="box-none" />
+          <View style={styles.guideCard} pointerEvents="box-none">
+            <BlurView intensity={50} tint="dark" style={styles.guideCardBlur} />
+            <View style={styles.guideCardTint} pointerEvents="none" />
+            <View style={[styles.guideScrollWrap, { width: guideSlideWidth }]}>
+              <ScrollView
+                ref={guideScrollRef}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onMomentumScrollEnd={onGuideScroll}
+                style={{ width: guideSlideWidth, flex: 1 }}
+                contentContainerStyle={{ paddingHorizontal: 0, flexGrow: 1 }}
+                bounces={false}
+                decelerationRate="fast"
+              >
+                {guideSlides.map((slide, index) => (
+                  <View key={index} style={[styles.guideSlide, { width: guideSlideWidth }]}>
+                    <View style={styles.guideSlideColumn}>
+                      <Text style={styles.guideTitle}>{t(slide.titleKey)}</Text>
+                      <Text style={styles.guideDesc}>{t(slide.descKey)}</Text>
+                      <View style={{ flex: 1 }} />
+                      <View style={styles.guideImageWrap}>
+                        <Image source={slide.image} style={styles.guideImage} resizeMode="contain" />
+                      </View>
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+            <View style={styles.guideDots}>
+              {[0, 1, 2, 3].map((i) => (
+                <View
+                  key={i}
+                  style={[styles.guideDot, i === guideSlideIndex ? styles.guideDotActive : styles.guideDotInactive]}
+                />
+              ))}
+            </View>
+            <TouchableOpacity style={styles.guideButton} onPress={onGuideNext} activeOpacity={0.85}>
+              <Text style={styles.guideButtonText}>
+                {guideSlideIndex >= 3 ? t('scanner.guideTakePhoto') : t('common.next')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <View style={styles.scanArea}>
         {selectedScan ? (
           <Image source={{ uri: selectedScan.uri }} style={styles.scanPreview} resizeMode="contain" />
@@ -410,7 +584,10 @@ export default function ScannerScreen({ navigation }) {
             )}
             <TouchableOpacity
               style={styles.controlButton}
-              onPress={() => Alert.alert(t('scanner.title'), t('scanner.instructions'))}
+              onPress={() => {
+              setGuideSlideIndex(0);
+              setInfoGuideVisible(true);
+            }}
               activeOpacity={0.8}
             >
               <Info size={22} color="#fff" strokeWidth={2} />
@@ -499,14 +676,17 @@ export default function ScannerScreen({ navigation }) {
               </Animated.View>
             </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={[styles.checkButton, hasScans && styles.checkButtonActive]}
-            onPress={handleStartAnalyzing}
-            disabled={!hasScans}
-            activeOpacity={0.85}
-          >
-            <Check size={24} color={hasScans ? colors.success : '#fff'} strokeWidth={2.5} />
-          </TouchableOpacity>
+          {hasScans ? (
+            <TouchableOpacity
+              style={styles.checkButton}
+              onPress={handleStartAnalyzing}
+              activeOpacity={0.85}
+            >
+              <Check size={24} color="#fff" strokeWidth={2.5} />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.captureSpacer} />
+          )}
         </View>
       </View>
     </View>

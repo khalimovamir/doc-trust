@@ -103,3 +103,155 @@ export async function exportAnalysisToPdf(analysis, options = {}) {
   }
   return uri;
 }
+
+/**
+ * Build HTML for chat history PDF (messages with role, content, time).
+ * @param {{ title: string, messages: Array<{ role: string, content: string, created_at: string }> }} params
+ */
+function buildChatHistoryHtml(params) {
+  const title = params?.title || 'Chat history';
+  const messages = Array.isArray(params?.messages) ? params.messages : [];
+  const formatTime = (createdAt) => {
+    if (!createdAt) return '';
+    try {
+      const d = new Date(createdAt);
+      return d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+    } catch (_) {
+      return String(createdAt);
+    }
+  };
+  const blocks = messages.map((m) => {
+    const isUser = m.role === 'user';
+    const label = isUser ? 'You' : 'AI Lawyer';
+    const time = formatTime(m.created_at);
+    const content = escapeHtml(m.content || '');
+    return `<div class="msg ${isUser ? 'msg-user' : 'msg-assistant'}">
+      <div class="msg-head">${escapeHtml(label)}${time ? ` <span class="msg-time">${escapeHtml(time)}</span>` : ''}</div>
+      <div class="msg-body">${content}</div>
+    </div>`;
+  }).join('');
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 24px; color: #111; font-size: 14px; line-height: 1.5; }
+    h1 { font-size: 18px; margin-bottom: 16px; color: #374151; }
+    .msg { margin: 16px 0; padding: 12px 16px; border-radius: 12px; max-width: 90%; }
+    .msg-user { background: #eff6ff; margin-left: 0; margin-right: auto; border: 1px solid #bfdbfe; }
+    .msg-assistant { background: #f3f4f6; margin-left: auto; margin-right: 0; border: 1px solid #e5e7eb; }
+    .msg-head { font-size: 12px; font-weight: 600; color: #4b5563; margin-bottom: 6px; }
+    .msg-time { font-weight: 400; color: #9ca3af; font-size: 11px; }
+    .msg-body { white-space: pre-wrap; word-break: break-word; }
+    .footer { margin-top: 24px; font-size: 12px; color: #9ca3af; }
+  </style>
+</head>
+<body>
+  <h1>${escapeHtml(title)}</h1>
+  ${blocks || '<p>No messages.</p>'}
+  <p class="footer">Exported from AI Lawyer</p>
+</body>
+</html>`;
+}
+
+/**
+ * Build HTML for comparison result PDF (summary + differences).
+ * @param {{ summary: string, document1Name: string, document2Name: string, differences: Array<{ type: string, document1?: string, document2?: string, title?: string, significance?: string, section?: string }> }} params
+ */
+function buildComparingResultHtml(params) {
+  const summary = params?.summary || '';
+  const doc1Name = params?.document1Name || 'Original';
+  const doc2Name = params?.document2Name || 'Revised';
+  const differences = Array.isArray(params?.differences) ? params.differences : [];
+  const diffBlocks = differences.map((d) => {
+    const type = d.type || 'changed';
+    const oldText = d.document1 ?? d.oldText ?? '';
+    const newText = d.document2 ?? d.newText ?? '';
+    const title = d.title ? `<strong>${escapeHtml(d.title)}</strong><br/>` : '';
+    const strike = oldText ? `<span style="text-decoration: line-through; color: #6b7280;">${escapeHtml(oldText)}</span><br/>` : '';
+    const added = newText ? `<span style="font-weight: 500;">${escapeHtml(newText)}</span>` : '';
+    const sig = d.significance ? `<p style="margin-top: 6px; color: #6b7280; font-size: 13px;">${escapeHtml(d.significance)}</p>` : '';
+    const section = d.section ? `<span class="badge">${escapeHtml(d.section)}</span>` : '';
+    return `<div class="diff-block"><div class="diff-type">${escapeHtml(type)}</div>${title}<div>${strike}${added}</div>${sig}${section}</div>`;
+  }).join('');
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 24px; color: #111; font-size: 14px; line-height: 1.5; }
+    h1 { font-size: 20px; margin-bottom: 8px; }
+    .docs { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; font-size: 14px; color: #374151; }
+    .section { margin-top: 20px; }
+    .section h2 { font-size: 16px; margin-bottom: 8px; color: #374151; }
+    .diff-block { margin: 12px 0; padding: 12px; background: #f9fafb; border-radius: 8px; border-left: 4px solid #3b82f6; }
+    .diff-type { font-size: 11px; font-weight: 600; text-transform: uppercase; color: #6b7280; margin-bottom: 6px; }
+    .badge { font-size: 11px; color: #6b7280; display: inline-block; margin-top: 6px; }
+    .footer { margin-top: 24px; font-size: 12px; color: #9ca3af; }
+  </style>
+</head>
+<body>
+  <h1>Document comparison</h1>
+  <div class="docs"><span>${escapeHtml(doc1Name)}</span> → <span>${escapeHtml(doc2Name)}</span></div>
+  ${summary ? `<div class="section"><h2>Summary</h2><p>${escapeHtml(summary)}</p></div>` : ''}
+  ${differences.length ? `<div class="section"><h2>Differences</h2>${diffBlocks}</div>` : '<p>No differences.</p>'}
+  <p class="footer">Generated by AI Lawyer</p>
+</body>
+</html>`;
+}
+
+/**
+ * Export comparison result to PDF and open share sheet.
+ * @param {{ summary: string, differences: Array }} result
+ * @param {{ document1Name?: string, document2Name?: string, dialogTitle?: string }} options
+ * @returns {Promise<string>} PDF file URI
+ */
+export async function exportComparingResultToPdf(result, options = {}) {
+  const { document1Name = '', document2Name = '', dialogTitle = 'Export comparison as PDF' } = options;
+  const params = {
+    summary: result?.summary || '',
+    document1Name,
+    document2Name,
+    differences: result?.differences || [],
+  };
+  const html = buildComparingResultHtml(params);
+  const { uri } = await Print.printToFileAsync({
+    html,
+    base64: false,
+  });
+  const canShare = await Sharing.isAvailableAsync();
+  if (canShare) {
+    await Sharing.shareAsync(uri, {
+      mimeType: 'application/pdf',
+      dialogTitle,
+    });
+  }
+  return uri;
+}
+
+/**
+ * Export chat message history to PDF and open share sheet.
+ * @param {Array<{ role: string, content: string, created_at: string }>} messages - from getChatMessages
+ * @param {{ chatTitle?: string, dialogTitle?: string }} options
+ * @returns {Promise<string>} PDF file URI
+ */
+export async function exportChatHistoryToPdf(messages, options = {}) {
+  const { chatTitle = 'Chat history', dialogTitle = 'Export chat history' } = options;
+  const html = buildChatHistoryHtml({ title: chatTitle, messages });
+  const { uri } = await Print.printToFileAsync({
+    html,
+    base64: false,
+  });
+  const canShare = await Sharing.isAvailableAsync();
+  if (canShare) {
+    await Sharing.shareAsync(uri, {
+      mimeType: 'application/pdf',
+      dialogTitle,
+    });
+  }
+  return uri;
+}

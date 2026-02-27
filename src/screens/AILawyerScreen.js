@@ -150,7 +150,7 @@ export default function AILawyerScreen() {
         },
         content: { flex: 1, paddingHorizontal: spacing.md },
         contentEmpty: { flex: 1, paddingHorizontal: 16 },
-        emptyCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 32 },
+        emptyCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 16, paddingBottom: 32 },
         emptyTopBlock: { alignItems: 'center', marginBottom: 16 },
         emptyLogo: { width: 88, height: 88, marginBottom: spacing.lg },
         emptyTitle: {
@@ -250,7 +250,7 @@ export default function AILawyerScreen() {
           bottom: 0,
           paddingHorizontal: spacing.md,
           paddingTop: spacing.md,
-          paddingBottom: Platform.OS === 'android' ? 100 + 24 : 100,
+          paddingBottom: Platform.OS === 'android' ? 100 + 12 : 100,
         },
         addChatBtn: {
           flexDirection: 'row',
@@ -269,17 +269,22 @@ export default function AILawyerScreen() {
   );
 
   const hasChats = chats.length > 0;
-  const showListArea = loading || hasChats;
+  const showChatList = hasChats;
+  const showStartChatPage = !loading && !hasChats;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {showListArea ? (
+      {showChatList ? (
         <View style={styles.appBar}>
           <Text style={styles.headerTitle}>{t('screens.aiLawyer')}</Text>
         </View>
       ) : null}
 
-      {!showListArea ? (
+      {loading && !hasChats ? (
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : showStartChatPage ? (
         <ScrollView style={[styles.content, styles.contentEmpty]} contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
           <View style={styles.emptyCenter}>
             <View style={styles.emptyTopBlock}>
@@ -326,7 +331,7 @@ export default function AILawyerScreen() {
         <View style={styles.chatListWrap}>
           <ScrollView
             style={styles.content}
-            contentContainerStyle={[styles.listContent, { paddingBottom: 24 + 56 + spacing.md + (Platform.OS === 'android' ? 100 + 24 : 100) }]}
+            contentContainerStyle={[styles.listContent, { paddingBottom: 24 + 56 + spacing.md + (Platform.OS === 'android' ? 100 + 12 : 100) }]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >

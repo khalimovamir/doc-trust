@@ -213,6 +213,13 @@ export default function SettingsScreen({ navigation }) {
             colors={colors}
           />
           <SettingsRow
+            icon={<FileText size={22} color={colors.primary} strokeWidth={2} />}
+            title={t('settings.termsOfUse')}
+            subtitle={t('settings.termsOfUseSubtitle')}
+            rowStyles={styles}
+            colors={colors}
+          />
+          <SettingsRow
             icon={<Lightbulb size={22} color={colors.primary} strokeWidth={2} />}
             title={t('settings.featureRequest')}
             subtitle={t('settings.featureRequestSubtitle')}

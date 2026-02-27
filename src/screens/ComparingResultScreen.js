@@ -3,18 +3,23 @@
  * Displays comparison result from Edge Function: summary, filters, diff cards.
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useLayoutEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Platform,
+  Alert,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { FileText, ArrowRight } from 'lucide-react-native';
+import { MenuView } from '@react-native-menu/menu';
 import { fontFamily, spacing, useTheme } from '../theme';
+import { NativeHeaderButtonEllipsis } from '../components/NativeHeaderButton';
 import { maybeRequestReview } from '../lib/requestReview';
+import { exportComparingResultToPdf } from '../lib/exportPdf';
 
 const SUMMARY_TRUNCATE_LEN = 200;
 
@@ -72,7 +77,7 @@ function DiffCard({ item, config, t, styles }) {
 
 export default function ComparingResultScreen({ navigation, route }) {
   const { t } = useTranslation();
-  const { colors } = useTheme();
+  const { colors, isDarkMode } = useTheme();
   const styles = useMemo(() => StyleSheet.create(createStyles(colors)), [colors]);
   const typeConfig = useMemo(() => getTypeConfig(colors), [colors]);
   const result = route.params?.result || null;
@@ -81,6 +86,77 @@ export default function ComparingResultScreen({ navigation, route }) {
 
   const [activeFilter, setActiveFilter] = useState('all');
   const [summaryShowMore, setSummaryShowMore] = useState(false);
+
+  const menuActions = useMemo(
+    () => [
+      {
+        id: 'share',
+        title: t('details.share'),
+        image: Platform.select({ ios: 'square.and.arrow.up', android: 'ic_menu_share' }),
+        imageColor: colors.primaryText,
+      },
+      {
+        id: 'export',
+        title: t('details.exportPdf'),
+        image: Platform.select({ ios: 'square.and.arrow.down', android: 'ic_menu_save' }),
+        imageColor: colors.primaryText,
+      },
+    ],
+    [t, colors.primaryText]
+  );
+
+  const menuActionRef = useRef(() => {});
+  menuActionRef.current = (eventId) => {
+    if (eventId === 'share' || eventId === 'export') {
+      const dialogTitle = eventId === 'share' ? t('details.share') : t('details.exportPdf');
+      exportComparingResultToPdf(result, {
+        document1Name,
+        document2Name,
+        dialogTitle,
+      }).catch((e) =>
+        Alert.alert(t('details.exportFailed'), e?.message || t('details.couldNotCreatePdf'))
+      );
+    }
+  };
+
+  const handleMenuAction = ({ nativeEvent }) => {
+    menuActionRef.current(nativeEvent.event);
+  };
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerStyle: { backgroundColor: colors.primaryBackground },
+      headerTitleStyle: { fontSize: 20, fontWeight: Platform.OS === 'android' ? '800' : '600', marginTop: 4, color: colors.primaryText },
+      headerTintColor: colors.primaryText,
+      ...(Platform.OS === 'ios'
+        ? {
+            unstable_headerRightItems: () => [
+              {
+                type: 'menu',
+                label: t('details.menuOptions'),
+                icon: { type: 'sfSymbol', name: 'ellipsis' },
+                menu: {
+                  title: '',
+                  items: [
+                    { type: 'action', label: t('details.share'), icon: { type: 'sfSymbol', name: 'square.and.arrow.up' }, onPress: () => menuActionRef.current('share') },
+                    { type: 'action', label: t('details.exportPdf'), icon: { type: 'sfSymbol', name: 'square.and.arrow.down' }, onPress: () => menuActionRef.current('export') },
+                  ],
+                },
+              },
+            ],
+          }
+        : {
+            headerRight: () => (
+              <View style={styles.menuButtonWrap}>
+                <MenuView onPressAction={handleMenuAction} actions={menuActions} themeVariant={isDarkMode ? 'dark' : 'light'} style={styles.menuButtonWrap}>
+                  <NativeHeaderButtonEllipsis iconSize={24} />
+                </MenuView>
+              </View>
+            ),
+            headerRightContainerStyle: { width: 44, height: 44, maxWidth: 44, maxHeight: 44, flexGrow: 0, flexShrink: 0, justifyContent: 'center', alignItems: 'center', paddingRight: 16 },
+          }),
+    });
+  }, [navigation, menuActions, colors, isDarkMode, t]);
 
   useEffect(() => {
     if (!result) return;
@@ -230,6 +306,21 @@ export default function ComparingResultScreen({ navigation, route }) {
 function createStyles(colors) {
   return {
     container: { flex: 1, backgroundColor: colors.primaryBackground },
+    menuButtonWrap: {
+      width: 44,
+      height: 44,
+      minWidth: 44,
+      minHeight: 44,
+      maxWidth: 44,
+      maxHeight: 44,
+      flexGrow: 0,
+      flexShrink: 0,
+      alignSelf: 'center',
+      borderRadius: 22,
+      overflow: 'hidden',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
     topSection: { paddingHorizontal: spacing.md, paddingTop: 12, paddingBottom: 16, backgroundColor: colors.primaryBackground },
     summaryCard: { backgroundColor: colors.secondaryBackground, borderRadius: 20, borderWidth: 1, borderColor: colors.tertiary, padding: spacing.md, gap: 12, marginTop: spacing.md, marginBottom: 0 },
     summaryCardTitle: { fontFamily, fontSize: 20, fontWeight: '600', color: colors.primaryText, lineHeight: 24 },

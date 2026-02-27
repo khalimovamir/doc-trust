@@ -181,8 +181,16 @@ function AppNavigatorInner() {
           component={CompareDocsScreen}
           options={{ ...headerWithBackOptions, headerShown: true, title: t('screens.compareDocs') }}
         />
-        <AppStack.Screen name="Analyzing" component={AnalyzingScreen} />
-        <AppStack.Screen name="Comparing" component={ComparingScreen} />
+        <AppStack.Screen
+          name="Analyzing"
+          component={AnalyzingScreen}
+          options={{ gestureEnabled: false }}
+        />
+        <AppStack.Screen
+          name="Comparing"
+          component={ComparingScreen}
+          options={{ gestureEnabled: false }}
+        />
         <AppStack.Screen
           name="ComparingResult"
           component={ComparingResultScreen}

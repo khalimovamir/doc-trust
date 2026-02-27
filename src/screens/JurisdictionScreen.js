@@ -14,6 +14,7 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { Search, Check } from 'lucide-react-native';
 import { fontFamily, spacing, borderRadius, useTheme } from '../theme';
@@ -83,7 +84,7 @@ export default function JurisdictionScreen({ navigation }) {
   React.useLayoutEffect(() => {
     navigation.setOptions({
       headerStyle: { backgroundColor: colors.primaryBackground },
-      headerTitleStyle: { color: colors.primaryText },
+      headerTitleStyle: { fontSize: 20, fontWeight: Platform.OS === 'android' ? '800' : '600', marginTop: 4, color: colors.primaryText },
       headerTintColor: colors.primaryText,
     });
   }, [navigation, colors]);

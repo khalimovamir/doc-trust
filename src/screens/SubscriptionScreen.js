@@ -185,9 +185,9 @@ export default function SubscriptionScreen({ navigation, route }) {
           </Text>
         </TouchableOpacity>
         <View style={styles.footerLinks}>
-          <TouchableOpacity onPress={() => {}}><Text style={styles.footerLink}>{t('subscription.termsOfUse')}</Text></TouchableOpacity>
+          <TouchableOpacity onPress={() => {}}><Text style={styles.footerLink}>Terms of Use</Text></TouchableOpacity>
           <TouchableOpacity onPress={() => {}}><Text style={styles.footerLink}>{t('subscription.restore')}</Text></TouchableOpacity>
-          <TouchableOpacity onPress={() => {}}><Text style={styles.footerLink}>{t('subscription.privacyPolicy')}</Text></TouchableOpacity>
+          <TouchableOpacity onPress={() => {}}><Text style={styles.footerLink}>Privacy Policy</Text></TouchableOpacity>
         </View>
       </View>
     </View>

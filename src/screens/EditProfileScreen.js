@@ -37,7 +37,6 @@ export default function EditProfileScreen({ navigation }) {
   const styles = useMemo(() => StyleSheet.create(createStyles(colors)), [colors]);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
-  const [age, setAge] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [pendingAvatarUri, setPendingAvatarUri] = useState(null);
@@ -47,7 +46,6 @@ export default function EditProfileScreen({ navigation }) {
     if (profile) {
       setFullName(profile.full_name || '');
       setEmail(profile.email || user?.email || '');
-      setAge(profile.age != null ? String(profile.age) : '');
     }
     setLoading(profile !== undefined);
   }, [profile, user?.email]);
@@ -74,10 +72,6 @@ export default function EditProfileScreen({ navigation }) {
     const nextErrors = {};
     if (!email.trim()) nextErrors.email = t('editProfile.errorEmailRequired');
     else if (!isValidEmail(email.trim())) nextErrors.email = t('editProfile.errorEmailInvalid');
-    const ageNum = age.trim() ? parseInt(age, 10) : null;
-    if (age.trim() && (isNaN(ageNum) || ageNum < 1 || ageNum > 150)) {
-      nextErrors.age = t('editProfile.errorAgeRange');
-    }
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
@@ -86,7 +80,6 @@ export default function EditProfileScreen({ navigation }) {
       const updates = {
         full_name: fullName.trim() || null,
         email: email.trim(),
-        age: ageNum,
       };
       if (pendingAvatarUri) {
         let avatarUrl;
@@ -118,7 +111,7 @@ export default function EditProfileScreen({ navigation }) {
     return (
       <View style={styles.container}>
         <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <SkeletonForm avatarSize={100} fieldCount={3} />
+          <SkeletonForm avatarSize={100} fieldCount={2} />
         </ScrollView>
       </View>
     );
@@ -176,18 +169,6 @@ export default function EditProfileScreen({ navigation }) {
               autoCapitalize="none"
             />
             {errors.email ? <Text style={styles.errorText}>{errors.email}</Text> : null}
-          </View>
-          <View style={styles.field}>
-            <Text style={styles.label}>{t('editProfile.ageLabel')}</Text>
-            <TextInput
-              style={[styles.input, errors.age && styles.inputError]}
-              value={age}
-              onChangeText={(val) => { setAge(val.replace(/\D/g, '').slice(0, 3)); setErrors((e) => ({ ...e, age: '' })); }}
-              placeholder={t('editProfile.agePlaceholder')}
-              placeholderTextColor={colors.secondaryText}
-              keyboardType="number-pad"
-            />
-            {errors.age ? <Text style={styles.errorText}>{errors.age}</Text> : null}
           </View>
         </View>
       </ScrollView>

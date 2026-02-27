@@ -41,7 +41,7 @@ import { useSubscription } from '../context/SubscriptionContext';
 import { dismissUserOffer, startNextOfferWindow } from '../lib/subscription';
 import { getAnalysesForUserWithCache } from '../lib/documents';
 import { ScoreRing, detailsCreateStyles } from './DetailsScreen';
-import { SkeletonScanOrHistoryCard, SkeletonOfferBanner } from '../components/Skeleton';
+import { SkeletonScanOrHistoryCard } from '../components/Skeleton';
 
 import { formatDateShort } from '../lib/dateFormat';
 import { getTextFromImageUri } from '../lib/uploadDocument';
@@ -383,10 +383,8 @@ export default function HomeScreen({ navigation }) {
           <ArrowRight size={24} color={colors.primaryText} strokeWidth={2} />
         </TouchableOpacity>
 
-        {/* Limited Offer Banner */}
-        {!isPro && subscriptionLoading ? (
-          <SkeletonOfferBanner />
-        ) : showBanner ? (
+        {/* Limited Offer Banner — показываем только когда оффер активен; скелетон не показываем, чтобы не мелькал когда оффера нет */}
+        {showBanner ? (
           <TouchableOpacity style={styles.banner} activeOpacity={0.9} onPress={openOfferSheet}>
             <View style={styles.bannerContent}>
               <Text style={styles.bannerTitle}>{activeOffer?.title || t('home.limitedOffer')}</Text>
@@ -536,8 +534,8 @@ export default function HomeScreen({ navigation }) {
           </TouchableOpacity>
 
           <View style={styles.offerFooterLinks}>
-            <Text style={styles.offerFooterLink}>{t('subscription.termsOfUse')}</Text>
-            <Text style={styles.offerFooterLink}>{t('subscription.privacyPolicy')}</Text>
+            <Text style={styles.offerFooterLink}>Terms of Use</Text>
+            <Text style={styles.offerFooterLink}>Privacy Policy</Text>
           </View>
 
           </View>
@@ -623,7 +621,7 @@ function createStyles(colors) {
       paddingLeft: spacing.md,
       paddingRight: spacing.md,
       height: 56,
-      marginBottom: spacing.sm,
+      marginBottom: 0,
       minHeight: 56,
     },
     pasteButtonText: {
@@ -637,7 +635,7 @@ function createStyles(colors) {
       backgroundColor: colors.primary,
       borderRadius: borderRadius.xl,
       padding: spacing.md,
-      marginBottom: spacing.xl,
+      marginBottom: 0,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
@@ -819,7 +817,7 @@ function createStyles(colors) {
       width: 120,
       height: 120,
     },
-    section: { marginBottom: spacing.xl },
+    section: { marginTop: spacing.lg, marginBottom: spacing.xl },
     sectionHeader: {
       flexDirection: 'row',
       justifyContent: 'space-between',

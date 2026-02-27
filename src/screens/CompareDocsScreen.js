@@ -13,12 +13,14 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  Platform,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { FileText, ArrowUpDown, X } from 'lucide-react-native';
 import { fontFamily, spacing, borderRadius, useTheme } from '../theme';
 import IconButton from '../components/IconButton';
+import { NativeHeaderButtonInfo } from '../components/NativeHeaderButton';
 import { pickDocumentAndGetText } from '../lib/uploadDocument';
 
 function createStyles(colors) {
@@ -133,13 +135,47 @@ export default function CompareDocsScreen({ navigation, route }) {
 
   const canCompare = doc1?.text?.trim() && doc2?.text?.trim();
 
+  const handleInfoPress = () => {
+    Alert.alert(
+      t('compareDocs.infoDialogTitle'),
+      t('compareDocs.infoDialogMessage'),
+      [{ text: t('common.close') }]
+    );
+  };
+
   React.useLayoutEffect(() => {
     navigation.setOptions({
       headerStyle: { backgroundColor: colors.primaryBackground },
-      headerTitleStyle: { color: colors.primaryText },
+      headerTitleStyle: { fontSize: 20, fontWeight: Platform.OS === 'android' ? '800' : '600', marginTop: 4, color: colors.primaryText },
       headerTintColor: colors.primaryText,
+      // iOS: нативная кнопка — круглая, как на Upload File. Android: headerRight.
+      ...(Platform.OS === 'ios'
+        ? {
+            unstable_headerRightItems: () => [
+              {
+                type: 'button',
+                label: '',
+                icon: { type: 'sfSymbol', name: 'info.circle' },
+                onPress: handleInfoPress,
+              },
+            ],
+          }
+        : {
+            headerRight: () => <NativeHeaderButtonInfo onPress={handleInfoPress} iconSize={24} />,
+            headerRightContainerStyle: {
+              width: 44,
+              height: 44,
+              maxWidth: 44,
+              maxHeight: 44,
+              flexGrow: 0,
+              flexShrink: 0,
+              justifyContent: 'center',
+              alignItems: 'center',
+              paddingRight: 16,
+            },
+          }),
     });
-  }, [navigation, colors]);
+  }, [navigation, colors, t]);
 
   return (
     <View style={styles.container}>
