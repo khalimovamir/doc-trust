@@ -37,9 +37,11 @@ import {
 } from '@tabler/icons-react-native';
 import { fontFamily, spacing, borderRadius, useTheme } from '../theme';
 import { useAuth } from '../context/AuthContext';
+import { useGuest } from '../context/GuestContext';
+import { getGuestAnalysesList } from '../lib/guestAnalysisStorage';
 import { useSubscription } from '../context/SubscriptionContext';
-import { dismissUserOffer, startNextOfferWindow } from '../lib/subscription';
 import { getAnalysesForUserWithCache } from '../lib/documents';
+import { getLimitedOfferCycleStart, ensureCycleStart, isInShowWindow, getBannerExpiresAt } from '../lib/limitedOfferCycle';
 import { ScoreRing, detailsCreateStyles } from './DetailsScreen';
 import { SkeletonScanOrHistoryCard } from '../components/Skeleton';
 
@@ -76,17 +78,6 @@ function computeCountdown(expiresAt) {
     m: Math.floor((secs % 3600) / 60),
     s: secs % 60,
   };
-}
-
-function applyOfferDiscount(priceCents, offer) {
-  if (!offer) return priceCents;
-  if (offer.discount_type === 'percent' && (offer.discount_perc != null)) {
-    return Math.round(priceCents * (1 - Number(offer.discount_perc) / 100));
-  }
-  if (offer.discount_type === 'fixed' && (offer.discount_cent != null)) {
-    return Math.max(0, priceCents - Number(offer.discount_cent));
-  }
-  return priceCents;
 }
 
 function formatPrice(cents, currency = 'USD') {
@@ -129,14 +120,15 @@ export default function HomeScreen({ navigation }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const { user } = useAuth();
+  const { isGuest } = useGuest();
   const styles = useMemo(() => StyleSheet.create(createStyles(colors)), [colors]);
   const scoreRingStyles = useMemo(() => StyleSheet.create(detailsCreateStyles(colors)), [colors]);
   const {
     isPro,
-    offers,
     products,
-    ensureOfferState,
     isLoading: subscriptionLoading,
+    openSubscriptionIfLimitReached,
+    openSubscriptionBottomSheet,
   } = useSubscription();
 
   const [scanning, setScanning] = useState(false);
@@ -144,45 +136,24 @@ export default function HomeScreen({ navigation }) {
   const [recentScansLoading, setRecentScansLoading] = useState(false);
   const [totalAnalysesCount, setTotalAnalysesCount] = useState(0);
   const [isOfferSheetVisible, setIsOfferSheetVisible] = useState(false);
-  const [currentOffer, setCurrentOffer] = useState(null);
-  const [userOfferState, setUserOfferState] = useState(null);
   const [countdown, setCountdown] = useState({ h: 0, m: 0, s: 0 });
   const sheetTranslateY = useRef(new Animated.Value(Number(SCREEN_HEIGHT) || 800)).current;
 
-  const activeOffer = offers?.[0] ?? null;
-  const [bannerOfferState, setBannerOfferState] = useState(null);
+  const [cycleStartAt, setCycleStartAt] = useState(null);
 
   useEffect(() => {
-    if (!activeOffer || !user?.id || activeOffer?.mode !== 'per_user') return;
-    let cancelled = false;
-    ensureOfferState(activeOffer.id).then((state) => {
-      if (!cancelled) setBannerOfferState(state);
-    });
-    return () => { cancelled = true; };
-  }, [activeOffer?.id, activeOffer?.mode, user?.id, ensureOfferState]);
+    getLimitedOfferCycleStart().then(setCycleStartAt);
+  }, []);
 
-  // Recurring offer: when next_show_at is due, start next window (expires_at + recurrence_hidden_seco)
   useEffect(() => {
-    if (!activeOffer?.recurrence_hidden_seco || activeOffer?.mode !== 'per_user' || !bannerOfferState?.next_show_at) return;
-    const nextAt = new Date(bannerOfferState.next_show_at).getTime();
-    if (Date.now() < nextAt) return;
-    let cancelled = false;
-    startNextOfferWindow(activeOffer.id).then((updated) => {
-      if (!cancelled && updated) setBannerOfferState(updated);
-    });
-    return () => { cancelled = true; };
-  }, [activeOffer?.id, activeOffer?.mode, activeOffer?.recurrence_hidden_seco, bannerOfferState?.next_show_at]);
+    if (isPro || cycleStartAt != null) return;
+    ensureCycleStart().then(setCycleStartAt);
+  }, [isPro, cycleStartAt]);
 
-  const inOfferWindow = activeOffer?.mode === 'global'
-    || (activeOffer?.mode === 'per_user' && (
-      !bannerOfferState
-      || (bannerOfferState.expires_at && new Date(bannerOfferState.expires_at) > new Date())
-    ));
-  const showBanner = !isPro && !!activeOffer && inOfferWindow;
-
-  const bannerExpiresAt = activeOffer?.mode === 'global'
-    ? activeOffer?.ends_at
-    : bannerOfferState?.expires_at;
+  // Показываем баннер только после загрузки cycleStartAt из AsyncStorage, чтобы не было
+  // мигания и скачка таймера (сначала 24:00, потом 23:00 при подгрузке старых данных).
+  const showBanner = !isPro && cycleStartAt !== null && isInShowWindow(cycleStartAt);
+  const bannerExpiresAt = cycleStartAt != null ? getBannerExpiresAt(cycleStartAt) : null;
   const [bannerCountdown, setBannerCountdown] = useState({ h: 0, m: 0, s: 0 });
   const bannerExpiresAtRef = useRef(bannerExpiresAt);
   bannerExpiresAtRef.current = bannerExpiresAt;
@@ -197,30 +168,31 @@ export default function HomeScreen({ navigation }) {
     return () => clearInterval(id);
   }, [showBanner, bannerExpiresAt]);
 
-  // В bottom sheet оффера всегда эти 4 пункта из переводов (не из Supabase)
   const displayFeatures = OFFER_SHEET_FEATURES;
   const getFeatureFreeHas = (f) => f.freeHas === true;
 
   useEffect(() => {
-    const expiresAt = userOfferState?.expires_at ?? currentOffer?.ends_at ?? null;
-    if (!expiresAt) return;
-    const tick = () => setCountdown(computeCountdown(expiresAt));
+    if (!bannerExpiresAt) return;
+    const tick = () => setCountdown(computeCountdown(bannerExpiresAt));
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [userOfferState?.expires_at, currentOffer?.ends_at]);
+  }, [bannerExpiresAt]);
 
   const formatNum = (n) => String(n).padStart(2, '0');
   const handleScan = () => {
+    if (!openSubscriptionIfLimitReached('document_check', navigation)) return;
     navigation.navigate('Scanner');
   };
   const handleUpload = () => {
+    if (!openSubscriptionIfLimitReached('document_check', navigation)) return;
     navigation.navigate('UploadFile');
   };
   const handleCompare = () => {
     navigation.navigate('CompareDocs');
   };
   const handlePasteText = () => {
+    if (!openSubscriptionIfLimitReached('document_check', navigation)) return;
     navigation.navigate('PasteText');
   };
   const handleSeeAll = () => {
@@ -228,6 +200,34 @@ export default function HomeScreen({ navigation }) {
   };
 
   const fetchRecentScans = useCallback(() => {
+    if (isGuest) {
+      setRecentScansLoading(true);
+      getGuestAnalysesList()
+        .then((data) => {
+          const list = Array.isArray(data) ? data : [];
+          setTotalAnalysesCount(list.length);
+          const items = list.slice(0, 3).map((a) => {
+            const tags = [a.documentType || t('home.document')];
+            if (a.risksCount > 0) tags.push(`${a.risksCount} ${t('home.risks')}`);
+            if (a.tipsCount > 0) tags.push(`${a.tipsCount} ${t('home.tips')}`);
+            tags.push(t(getRiskLabelKey(a.score)));
+            return {
+              id: a.id,
+              title: a.documentType || t('home.document'),
+              tags,
+              date: formatDateShort(a.createdAt),
+              score: a.score ?? 0,
+            };
+          });
+          setRecentScans(items);
+        })
+        .catch(() => {
+          setRecentScans([]);
+          setTotalAnalysesCount(0);
+        })
+        .finally(() => setRecentScansLoading(false));
+      return;
+    }
     if (!user?.id) {
       setRecentScans([]);
       setTotalAnalysesCount(0);
@@ -259,7 +259,7 @@ export default function HomeScreen({ navigation }) {
         setTotalAnalysesCount(0);
       })
       .finally(() => setRecentScansLoading(false));
-  }, [user?.id, t]);
+  }, [user?.id, isGuest, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -267,15 +267,7 @@ export default function HomeScreen({ navigation }) {
     }, [fetchRecentScans])
   );
 
-  const openOfferSheet = async () => {
-    if (!activeOffer) return;
-    setCurrentOffer(activeOffer);
-    if (activeOffer.mode === 'per_user') {
-      const state = bannerOfferState ?? (await ensureOfferState(activeOffer.id).catch(() => null));
-      setUserOfferState(state);
-    } else {
-      setUserOfferState(null);
-    }
+  const openOfferSheet = () => {
     setIsOfferSheetVisible(true);
     sheetTranslateY.setValue(Number(SCREEN_HEIGHT) || 800);
     Animated.timing(sheetTranslateY, {
@@ -285,11 +277,6 @@ export default function HomeScreen({ navigation }) {
     }).start();
   };
   const closeOfferSheet = () => {
-    if (currentOffer?.mode === 'per_user' && user?.id && currentOffer?.id) {
-      dismissUserOffer(user.id, currentOffer.id).catch(() => {});
-    }
-    setCurrentOffer(null);
-    setUserOfferState(null);
     const h = Number(SCREEN_HEIGHT) || 800;
     Animated.timing(sheetTranslateY, {
       toValue: h,
@@ -306,7 +293,10 @@ export default function HomeScreen({ navigation }) {
       duration: 220,
       useNativeDriver: false,
     }).start(({ finished }) => {
-      if (finished) setIsOfferSheetVisible(false);
+      if (finished) {
+        setIsOfferSheetVisible(false);
+        openSubscriptionBottomSheet?.({ offerProductId: 'pro_yearly_offer' });
+      }
     });
   };
   const handleScanPress = (item) => {
@@ -345,10 +335,21 @@ export default function HomeScreen({ navigation }) {
     })
   ).current;
 
+  const handleProPress = () => {
+    openSubscriptionBottomSheet?.();
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.appBar}>
         <Text style={styles.headerTitle}>{t('home.headerTitle')}</Text>
+        <TouchableOpacity
+          style={styles.proButton}
+          onPress={handleProPress}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.proButtonText}>PRO</Text>
+        </TouchableOpacity>
       </View>
       <ScrollView
         style={styles.scroll}
@@ -383,12 +384,12 @@ export default function HomeScreen({ navigation }) {
           <ArrowRight size={24} color={colors.primaryText} strokeWidth={2} />
         </TouchableOpacity>
 
-        {/* Limited Offer Banner — показываем только когда оффер активен; скелетон не показываем, чтобы не мелькал когда оффера нет */}
+        {/* Limited Offer Banner — без скелетона; показываем только после загрузки цикла (нет мигания/скачка 23:00) */}
         {showBanner ? (
           <TouchableOpacity style={styles.banner} activeOpacity={0.9} onPress={openOfferSheet}>
             <View style={styles.bannerContent}>
-              <Text style={styles.bannerTitle}>{activeOffer?.title || t('home.limitedOffer')}</Text>
-              <Text style={styles.bannerDiscount}>{activeOffer?.subtitle || '50% OFF'}</Text>
+              <Text style={styles.bannerTitle}>{t('home.limitedOffer')}</Text>
+              <Text style={styles.bannerDiscount}>50% OFF</Text>
               <View style={styles.countdown}>
                 <View style={styles.countdownBox}>
                   <Text style={styles.countdownText}>{formatNum(bannerCountdown.h)}</Text>
@@ -433,10 +434,11 @@ export default function HomeScreen({ navigation }) {
         ) : null}
       </ScrollView>
 
+      {isOfferSheetVisible ? (
       <Modal
         transparent
         animationType="none"
-        visible={isOfferSheetVisible}
+        visible
         onRequestClose={closeOfferSheet}
       >
         <Pressable style={styles.offerSheetBackdrop} onPress={closeOfferSheet} />
@@ -514,14 +516,13 @@ export default function HomeScreen({ navigation }) {
           </View>
 
           {(() => {
-            const yearlyProduct = products?.find((p) => p.interval === 'yearly');
-            const basePrice = yearlyProduct?.price_cents ?? 2599;
-            const discounted = applyOfferDiscount(basePrice, currentOffer || activeOffer);
-            const currency = yearlyProduct?.currency ?? 'USD';
-            const perMonth = Math.round(discounted / 12);
+            const limitedOfferProduct = products?.find((p) => p.product_id === 'pro_yearly_offer');
+            const limitedOfferPriceCents = limitedOfferProduct?.price_cents ?? 1499;
+            const currency = limitedOfferProduct?.currency ?? 'USD';
+            const perMonth = Math.round(limitedOfferPriceCents / 12);
             return (
               <>
-                <Text style={styles.offerPrice}>{formatPrice(discounted, currency)} {t('home.offerYearly')}</Text>
+                <Text style={styles.offerPrice}>{formatPrice(limitedOfferPriceCents, currency)} {t('home.offerYearly')}</Text>
                 <Text style={styles.offerPriceSub}>{t('home.offerOnlyPerMonth', { price: formatPrice(perMonth, currency) })}</Text>
               </>
             );
@@ -529,7 +530,7 @@ export default function HomeScreen({ navigation }) {
 
           <TouchableOpacity style={styles.offerCta} activeOpacity={0.9} onPress={handleGetOffer}>
             <Text style={styles.offerCtaText}>
-              {t('home.getOfferCta', { discount: currentOffer?.subtitle || activeOffer?.subtitle || '50%' })}
+              {t('home.getOfferCta', { discount: '50%' })}
             </Text>
           </TouchableOpacity>
 
@@ -541,6 +542,7 @@ export default function HomeScreen({ navigation }) {
           </View>
         </Animated.View>
       </Modal>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -552,10 +554,27 @@ function createStyles(colors) {
       backgroundColor: colors.primaryBackground,
     },
     appBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
       paddingHorizontal: spacing.md,
       paddingTop: spacing.md,
       paddingBottom: spacing.sm,
       backgroundColor: colors.primaryBackground,
+    },
+    proButton: {
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: colors.primary,
+      paddingHorizontal: 12,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    proButtonText: {
+      fontFamily,
+      fontSize: 16,
+      fontWeight: '600',
+      color: '#ffffff',
     },
     scroll: { flex: 1 },
     scrollContent: {
@@ -632,6 +651,7 @@ function createStyles(colors) {
       color: colors.primaryText,
     },
     banner: {
+      marginTop: 12,
       backgroundColor: colors.primary,
       borderRadius: borderRadius.xl,
       padding: spacing.md,

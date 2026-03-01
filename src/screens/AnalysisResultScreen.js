@@ -20,14 +20,17 @@ import { NativeHeaderButtonEllipsis } from '../components/NativeHeaderButton';
 import { fontFamily, spacing, useTheme } from '../theme';
 import { SkeletonDetails } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
+import { useGuest } from '../context/GuestContext';
 import { useProfile } from '../context/ProfileContext';
 import { useAnalysis } from '../context/AnalysisContext';
 import { useAILawyerChat } from '../context/AILawyerChatContext';
 import { analyzeDocument } from '../lib/ai';
 import { getAppLanguageCode } from '../i18n';
 import { saveDocumentWithAnalysis, updateGuidanceItemDone } from '../lib/documents';
+import { saveGuestAnalysis } from '../lib/guestAnalysisStorage';
 import { exportAnalysisToPdf } from '../lib/exportPdf';
 import { maybeRequestReview } from '../lib/requestReview';
+import { useSubscription } from '../context/SubscriptionContext';
 import { useTranslation } from 'react-i18next';
 import {
   ScoreRing,
@@ -50,11 +53,16 @@ export default function AnalysisResultScreen({ navigation, route }) {
   const { t } = useTranslation();
   const { colors, isDarkMode } = useTheme();
   const { user } = useAuth();
+  const { isGuest } = useGuest();
   const { profile } = useProfile();
   const { analysis, setAnalysis } = useAnalysis();
+  const guestSavedIdRef = useRef(null);
   const { openChat } = useAILawyerChat();
+  const { refreshSubscription, decrementFeatureUsage } = useSubscription();
   const documentText = route.params?.documentText || '';
   const source = route.params?.source || 'paste';
+  const fromAnalyzing = route.params?.fromAnalyzing === true;
+  const hasIncrementedDocumentCheckRef = useRef(false);
   const tabLabels = TABS_KEYS.map((k) => t('analysis.' + k));
   const styles = useMemo(() => StyleSheet.create(detailsCreateStyles(colors)), [colors]);
   const severityConfig = useMemo(() => getSeverityConfig(colors), [colors]);
@@ -66,20 +74,22 @@ export default function AnalysisResultScreen({ navigation, route }) {
   const [isSaved, setIsSaved] = useState(false);
   const [reAnalyzing, setReAnalyzing] = useState(false);
 
-  const menuActions = React.useMemo(
-    () =>
-      isSaved
-        ? [
-            { id: 'share', title: t('details.share'), image: Platform.select({ ios: 'square.and.arrow.up', android: 'ic_menu_share' }), imageColor: Platform.select({ ios: colors.primaryText, android: colors.primaryText }) },
-            { id: 'export', title: t('details.exportPdf'), image: Platform.select({ ios: 'square.and.arrow.down', android: 'ic_menu_save' }), imageColor: Platform.select({ ios: colors.primaryText, android: colors.primaryText }) },
-            { id: 'compare', title: t('details.compare'), image: Platform.select({ ios: 'doc.on.doc', android: 'ic_menu_agenda' }), imageColor: Platform.select({ ios: colors.primaryText, android: colors.primaryText }) },
-            { id: 'delete', title: t('details.delete'), attributes: { destructive: true }, image: Platform.select({ ios: 'trash', android: 'ic_menu_delete' }), imageColor: Platform.select({ ios: '#ff3b30', android: '#ff3b30' }) },
-          ]
-        : [
-            { id: 'export', title: t('details.exportPdf'), image: Platform.select({ ios: 'square.and.arrow.down', android: 'ic_menu_save' }), imageColor: Platform.select({ ios: colors.primaryText, android: colors.primaryText }) },
-          ],
-    [t, colors.primaryText, isSaved]
-  );
+  const menuActions = React.useMemo(() => {
+    const withIcons = (items) =>
+      Platform.OS === 'android'
+        ? items.map(({ id, title, attributes }) => (attributes ? { id, title, attributes } : { id, title }))
+        : items;
+    return isSaved
+      ? withIcons([
+          { id: 'share', title: t('details.share'), image: 'square.and.arrow.up', imageColor: colors.primaryText },
+          { id: 'export', title: t('details.exportPdf'), image: 'square.and.arrow.down', imageColor: colors.primaryText },
+          { id: 'compare', title: t('details.compare'), image: 'doc.on.doc', imageColor: colors.primaryText },
+          { id: 'delete', title: t('details.delete'), attributes: { destructive: true }, image: 'trash', imageColor: '#ff3b30' },
+        ])
+      : withIcons([
+          { id: 'export', title: t('details.exportPdf'), image: 'square.and.arrow.down', imageColor: colors.primaryText },
+        ]);
+  }, [t, colors.primaryText, isSaved]);
   const lastJurisdictionRef = useRef(profile?.jurisdiction_code);
   const fromJurisdictionRef = useRef(false);
   const analysisRef = useRef(analysis);
@@ -91,6 +101,37 @@ export default function AnalysisResultScreen({ navigation, route }) {
       const t = setTimeout(() => maybeRequestReview(), 1500);
       return () => clearTimeout(t);
     }, [analysis?.score])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!fromAnalyzing || !analysis || hasIncrementedDocumentCheckRef.current) return;
+      hasIncrementedDocumentCheckRef.current = true;
+      (async () => {
+        await decrementFeatureUsage('document_check').catch(() => {});
+        if (source === 'scan') {
+          await decrementFeatureUsage('scan_document').catch(() => {});
+        }
+        refreshSubscription();
+      })();
+    }, [fromAnalyzing, analysis, source, refreshSubscription, decrementFeatureUsage])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!isGuest) return;
+      if (!analysis || !documentText || !source || guestSavedIdRef.current) return;
+      guestSavedIdRef.current = 'pending';
+      saveGuestAnalysis(analysis, documentText, source)
+        .then((item) => {
+          guestSavedIdRef.current = item.id;
+          setAnalysis((prev) => (prev ? { ...prev, id: item.id } : prev));
+          setIsSaved(true);
+        })
+        .catch(() => {
+          guestSavedIdRef.current = null;
+        });
+    }, [isGuest, analysis, documentText, source, setAnalysis])
   );
 
   const rawRedFlags = analysis?.redFlags || RED_FLAGS_ITEMS;
@@ -220,6 +261,9 @@ export default function AnalysisResultScreen({ navigation, route }) {
     [t, navigation, documentText]
   );
 
+  const menuActionRef = useRef(handleMenuAction);
+  menuActionRef.current = handleMenuAction;
+
   const onJurisdictionEdit = useCallback(() => {
     fromJurisdictionRef.current = true;
     lastJurisdictionRef.current = profile?.jurisdiction_code;
@@ -243,20 +287,43 @@ export default function AnalysisResultScreen({ navigation, route }) {
   );
 
   useLayoutEffect(() => {
+    const menuItems = isSaved
+      ? [
+          { type: 'action', label: t('details.share'), icon: { type: 'sfSymbol', name: 'square.and.arrow.up' }, onPress: () => menuActionRef.current({ nativeEvent: { event: 'share' } }) },
+          { type: 'action', label: t('details.exportPdf'), icon: { type: 'sfSymbol', name: 'square.and.arrow.down' }, onPress: () => menuActionRef.current({ nativeEvent: { event: 'export' } }) },
+          { type: 'action', label: t('details.compare'), icon: { type: 'sfSymbol', name: 'doc.on.doc' }, onPress: () => menuActionRef.current({ nativeEvent: { event: 'compare' } }) },
+          { type: 'action', label: t('details.delete'), icon: { type: 'sfSymbol', name: 'trash' }, destructive: true, onPress: () => menuActionRef.current({ nativeEvent: { event: 'delete' } }) },
+        ]
+      : [
+          { type: 'action', label: t('details.exportPdf'), icon: { type: 'sfSymbol', name: 'square.and.arrow.down' }, onPress: () => menuActionRef.current({ nativeEvent: { event: 'export' } }) },
+        ];
     navigation.setOptions({
       headerStyle: { backgroundColor: colors.primaryBackground },
       headerTitleStyle: { fontSize: 20, fontWeight: Platform.OS === 'android' ? '800' : '600', marginTop: 4, color: colors.primaryText },
       headerTintColor: colors.primaryText,
-      headerRight: () => (
-        <View style={styles.menuButtonWrap}>
-          <MenuView onPressAction={handleMenuAction} actions={menuActions} themeVariant={isDarkMode ? 'dark' : 'light'} style={styles.menuButtonWrap}>
-            <NativeHeaderButtonEllipsis iconSize={24} />
-          </MenuView>
-        </View>
-      ),
-      headerRightContainerStyle: { width: 44, height: 44, maxWidth: 44, maxHeight: 44, flexGrow: 0, flexShrink: 0, justifyContent: 'center', alignItems: 'center', ...(Platform.OS === 'android' && { paddingRight: 16 }) },
+      ...(Platform.OS === 'ios'
+        ? {
+            unstable_headerRightItems: () => [
+              {
+                type: 'menu',
+                label: t('details.menuOptions'),
+                icon: { type: 'sfSymbol', name: 'ellipsis' },
+                menu: { title: '', items: menuItems },
+              },
+            ],
+          }
+        : {
+            headerRight: () => (
+              <View style={styles.menuButtonWrap}>
+                <MenuView onPressAction={handleMenuAction} actions={menuActions} themeVariant={isDarkMode ? 'dark' : 'light'} style={styles.menuButtonWrap}>
+                  <NativeHeaderButtonEllipsis iconSize={24} />
+                </MenuView>
+              </View>
+            ),
+            headerRightContainerStyle: { width: 44, height: 44, maxWidth: 44, maxHeight: 44, flexGrow: 0, flexShrink: 0, justifyContent: 'center', alignItems: 'center', paddingRight: 16 },
+          }),
     });
-  }, [navigation, colors, menuActions, isDarkMode]);
+  }, [navigation, colors, menuActions, isDarkMode, isSaved, t]);
 
   const filteredIssues =
     activeFilter === 'all' ? redFlags : redFlags.filter((item) => item.type === activeFilter);

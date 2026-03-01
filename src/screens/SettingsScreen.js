@@ -31,6 +31,7 @@ import {
 } from 'lucide-react-native';
 import { fontFamily, spacing, borderRadius, useTheme } from '../theme';
 import { useAuth } from '../context/AuthContext';
+import { useGuest } from '../context/GuestContext';
 import { useProfile } from '../context/ProfileContext';
 import { useSubscription } from '../context/SubscriptionContext';
 import { openLanguageSettings } from '../openLanguageSettings';
@@ -64,9 +65,11 @@ function SettingsRow({
 export default function SettingsScreen({ navigation }) {
   const { t } = useTranslation();
   const { colors, isDarkMode, setDarkMode } = useTheme();
-  const { signOut } = useAuth();
+  const { user, signOut } = useAuth();
+  const { isGuest } = useGuest();
   const { profile } = useProfile();
-  const { isPro, features } = useSubscription();
+  const { isPro, features, persistUsageForPostLogout, openSubscriptionBottomSheet } = useSubscription();
+  const isLoggedIn = !!user?.id && !isGuest;
 
   const styles = useMemo(() => StyleSheet.create(createStyles(colors)), [colors]);
 
@@ -76,7 +79,14 @@ export default function SettingsScreen({ navigation }) {
       t('settings.logoutConfirmDescription'),
       [
         { text: t('common.cancel'), style: 'cancel' },
-        { text: t('common.logout'), style: 'destructive', onPress: () => signOut() },
+        {
+        text: t('common.logout'),
+        style: 'destructive',
+        onPress: async () => {
+          await persistUsageForPostLogout?.();
+          signOut();
+        },
+      },
       ]
     );
   };
@@ -93,14 +103,39 @@ export default function SettingsScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.profileCard}>
-          <TouchableOpacity
-            style={styles.profileTop}
-            activeOpacity={0.8}
-            onPress={() => navigation.navigate('EditProfile')}
-          >
-            {profile?.avatar_url ? (
-              <Image source={{ uri: profile.avatar_url }} style={styles.avatar} />
-            ) : (
+          {isLoggedIn ? (
+            <TouchableOpacity
+              style={styles.profileTop}
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('EditProfile')}
+            >
+              {profile?.avatar_url ? (
+                <Image source={{ uri: profile.avatar_url }} style={styles.avatar} />
+              ) : (
+                <View style={[styles.avatar, styles.defaultAvatarCard]}>
+                  <Image
+                    source={isDarkMode ? require('../../assets/default-avatar-dark.png') : require('../../assets/default-avatar.png')}
+                    style={styles.defaultAvatarImage}
+                    resizeMode="contain"
+                  />
+                </View>
+              )}
+              <View style={styles.profileTextCol}>
+                <Text style={styles.profileName}>
+                  {profile?.full_name?.trim() || t('settings.profileCardTitle')}
+                </Text>
+                <Text style={styles.profileEmail}>
+                  {profile?.email || '—'}
+                </Text>
+              </View>
+              <ChevronRight size={24} color={colors.secondaryText} strokeWidth={2} />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.profileTop}
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('GetStartedFromSettings')}
+            >
               <View style={[styles.avatar, styles.defaultAvatarCard]}>
                 <Image
                   source={isDarkMode ? require('../../assets/default-avatar-dark.png') : require('../../assets/default-avatar.png')}
@@ -108,29 +143,24 @@ export default function SettingsScreen({ navigation }) {
                   resizeMode="contain"
                 />
               </View>
-            )}
-            <View style={styles.profileTextCol}>
-              <Text style={styles.profileName}>
-                {profile?.full_name?.trim() || t('settings.profileCardTitle')}
-              </Text>
-              <Text style={styles.profileEmail}>
-                {profile?.email || '—'}
-              </Text>
-            </View>
-            <ChevronRight size={24} color={colors.secondaryText} strokeWidth={2} />
-          </TouchableOpacity>
+              <View style={styles.profileTextCol}>
+                <Text style={styles.profileName}>{t('settings.signIn')}</Text>
+              </View>
+              <ChevronRight size={24} color={colors.secondaryText} strokeWidth={2} />
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             style={styles.proCard}
             activeOpacity={0.8}
-            onPress={() => navigation.navigate('Subscription')}
+            onPress={() => openSubscriptionBottomSheet?.()}
           >
             <View style={styles.proTitleRow}>
               <Text style={styles.proTitle}>{t('settings.proTitle')}</Text>
               <TouchableOpacity
                 style={[styles.upgradeBtn, isPro && styles.upgradeBtnActive]}
                 activeOpacity={0.8}
-                onPress={() => navigation.navigate('Subscription')}
+                onPress={(e) => { e?.stopPropagation?.(); openSubscriptionBottomSheet?.(); }}
               >
                 <Text style={styles.upgradeText}>{isPro ? t('settings.active') : t('settings.upgrade')}</Text>
               </TouchableOpacity>
@@ -169,14 +199,25 @@ export default function SettingsScreen({ navigation }) {
 
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>{t('settings.general')}</Text>
-          <SettingsRow
-            icon={<UserRound size={24} color={colors.primary} strokeWidth={2} />}
-            title={t('settings.personalDetails')}
-            subtitle={t('settings.personalDetailsSubtitle')}
-            rowStyles={styles}
-            colors={colors}
-            onPress={() => navigation.navigate('EditProfile')}
-          />
+          {isLoggedIn ? (
+            <SettingsRow
+              icon={<UserRound size={24} color={colors.primary} strokeWidth={2} />}
+              title={t('settings.personalDetails')}
+              subtitle={t('settings.personalDetailsSubtitle')}
+              rowStyles={styles}
+              colors={colors}
+              onPress={() => navigation.navigate('EditProfile')}
+            />
+          ) : (
+            <SettingsRow
+              icon={<UserRound size={24} color={colors.primary} strokeWidth={2} />}
+              title={t('settings.signIn')}
+              subtitle={t('settings.signInSubtitle')}
+              rowStyles={styles}
+              colors={colors}
+              onPress={() => navigation.navigate('GetStartedFromSettings')}
+            />
+          )}
           <SettingsRow
             icon={<Globe size={24} color={colors.primary} strokeWidth={2} />}
             title={t('common.language')}
@@ -235,15 +276,17 @@ export default function SettingsScreen({ navigation }) {
             colors={colors}
             onPress={() => requestReviewFromSettings()}
           />
-          <SettingsRow
-            icon={<LogOut size={22} color={colors.error} strokeWidth={2} />}
-            title={t('common.logout')}
-            danger
-            compact
-            rowStyles={styles}
-            colors={colors}
-            onPress={handleOpenLogoutDialog}
-          />
+          {isLoggedIn && (
+            <SettingsRow
+              icon={<LogOut size={22} color={colors.error} strokeWidth={2} />}
+              title={t('common.logout')}
+              danger
+              compact
+              rowStyles={styles}
+              colors={colors}
+              onPress={handleOpenLogoutDialog}
+            />
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>

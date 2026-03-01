@@ -22,6 +22,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MenuView } from '@react-native-menu/menu';
 import { Plus, MessageCircleQuestion, MoreVertical } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
+import { useGuest } from '../context/GuestContext';
+import { useSubscription } from '../context/SubscriptionContext';
 import { useAILawyerChat } from '../context/AILawyerChatContext';
 import { useTheme, fontFamily, spacing, borderRadius, typography } from '../theme';
 import {
@@ -31,6 +33,13 @@ import {
   addChatMessage,
   deleteChat,
 } from '../lib/chat';
+import {
+  getGuestChats,
+  getGuestChatLastMessage,
+  createGuestChat,
+  addGuestChatMessage,
+  deleteGuestChat,
+} from '../lib/guestChatStorage';
 import { ASSISTANT_GREETING } from '../components/ChatView';
 import { SkeletonChatCard } from '../components/Skeleton';
 import { formatChatCardTime } from '../lib/dateFormat';
@@ -40,6 +49,8 @@ export default function AILawyerScreen() {
   const { colors } = useTheme();
   const navigation = useNavigation();
   const { user } = useAuth();
+  const { isGuest } = useGuest();
+  const { openSubscriptionIfLimitReached } = useSubscription();
   const { setCurrentChatId, setChatContext, setChatPrompt, setRefreshChatTrigger } = useAILawyerChat();
 
   const [chats, setChats] = useState([]);
@@ -47,7 +58,29 @@ export default function AILawyerScreen() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
 
+  const isGuestUser = !user?.id || isGuest;
+
   const fetchChats = useCallback(async () => {
+    if (isGuestUser) {
+      setLoading(true);
+      try {
+        const list = await getGuestChats();
+        setChats(list);
+        const last = {};
+        await Promise.all(
+          list.map(async (c) => {
+            const msg = await getGuestChatLastMessage(c.id);
+            if (msg) last[c.id] = msg;
+          })
+        );
+        setLastMessages(last);
+      } catch (_) {
+        setChats([]);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
     if (!user?.id) {
       setChats([]);
       setLoading(false);
@@ -70,7 +103,7 @@ export default function AILawyerScreen() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [user?.id, isGuest]);
 
   useFocusEffect(
     useCallback(() => {
@@ -84,16 +117,30 @@ export default function AILawyerScreen() {
   };
 
   const handleStartChat = async (optionalPrompt = null) => {
-    if (!user?.id || creating) return;
+    if ((!user?.id && !isGuest) || creating) return;
+    const root = navigation.getParent?.()?.getParent?.() ?? navigation.getParent?.();
+    if (!openSubscriptionIfLimitReached('ai_lawyer', root ?? navigation)) return;
     setCreating(true);
     try {
-      const created = await createChat(user.id, 'New chat', null);
-      await addChatMessage(created.id, 'assistant', ASSISTANT_GREETING);
-      setCurrentChatId(created.id);
-      setChatContext(null);
-      setChatPrompt(optionalPrompt ?? '');
-      setRefreshChatTrigger((p) => p + 1);
-      openChatScreen();
+      if (isGuestUser) {
+        const created = await createGuestChat('New chat', null);
+        await addGuestChatMessage(created.id, 'assistant', ASSISTANT_GREETING);
+        setCurrentChatId(created.id);
+        setChatContext(null);
+        setChatPrompt(optionalPrompt ?? '');
+        setRefreshChatTrigger((p) => p + 1);
+        setChats((prev) => [created, ...prev]);
+        setLastMessages((prev) => ({ ...prev, [created.id]: { content: ASSISTANT_GREETING, created_at: created.created_at } }));
+        openChatScreen();
+      } else {
+        const created = await createChat(user.id, 'New chat', null);
+        await addChatMessage(created.id, 'assistant', ASSISTANT_GREETING);
+        setCurrentChatId(created.id);
+        setChatContext(null);
+        setChatPrompt(optionalPrompt ?? '');
+        setRefreshChatTrigger((p) => p + 1);
+        openChatScreen();
+      }
     } catch (_) {}
     setCreating(false);
   };
@@ -103,6 +150,8 @@ export default function AILawyerScreen() {
   };
 
   const handleOpenChat = (chat) => {
+    const root = navigation.getParent?.()?.getParent?.() ?? navigation.getParent?.();
+    if (!openSubscriptionIfLimitReached('ai_lawyer', root ?? navigation)) return;
     setCurrentChatId(chat.id);
     setChatContext(null);
     setRefreshChatTrigger((p) => p + 1);
@@ -120,7 +169,11 @@ export default function AILawyerScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteChat(chatId);
+              if (isGuestUser) {
+                await deleteGuestChat(chatId);
+              } else {
+                await deleteChat(chatId);
+              }
               setChats((prev) => prev.filter((c) => c.id !== chatId));
               const next = { ...lastMessages };
               delete next[chatId];

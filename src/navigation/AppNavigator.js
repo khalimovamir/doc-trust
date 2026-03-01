@@ -12,10 +12,13 @@ import { NavigationContainer, useNavigationContainerRef } from '@react-navigatio
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
+import { useGuest } from '../context/GuestContext';
+import { useSubscription } from '../context/SubscriptionContext';
 import { useTheme } from '../theme';
 import { AILawyerChatProvider } from '../context/AILawyerChatContext';
 
 import OnboardingScreen from '../screens/OnboardingScreen';
+import OnboardingJurisdictionScreen from '../screens/OnboardingJurisdictionScreen';
 import GetStartedScreen from '../screens/GetStartedScreen';
 import SignUpScreen from '../screens/SignUpScreen';
 import SignInScreen from '../screens/SignInScreen';
@@ -31,7 +34,6 @@ import JurisdictionScreen from '../screens/JurisdictionScreen';
 import EditProfileScreen from '../screens/EditProfileScreen';
 import FeatureRequestScreen from '../screens/FeatureRequestScreen';
 import SendIdeaScreen from '../screens/SendIdeaScreen';
-import SubscriptionScreen from '../screens/SubscriptionScreen';
 import ScannerScreen from '../screens/ScannerScreen';
 import PasteTextScreen from '../screens/PasteTextScreen';
 import UploadFileScreen from '../screens/UploadFileScreen';
@@ -65,31 +67,36 @@ function AuthNavigator() {
   return (
     <AuthStack.Navigator screenOptions={{ headerShown: false }}>
       <AuthStack.Screen name="Onboarding" component={OnboardingScreen} />
+      <AuthStack.Screen
+        name="OnboardingJurisdiction"
+        component={OnboardingJurisdictionScreen}
+        options={{ ...headerWithBackOptions, headerShown: true, title: t('screens.jurisdiction') }}
+      />
       <AuthStack.Screen name="GetStarted" component={GetStartedScreen} />
       <AuthStack.Screen
         name="SignUp"
         component={SignUpScreen}
-        options={{ ...authHeaderOptions, headerShown: true, title: t('screens.signUp') }}
+        options={{ ...authHeaderOptions, headerShown: true, title: '' }}
       />
       <AuthStack.Screen
         name="SignIn"
         component={SignInScreen}
-        options={{ ...authHeaderOptions, headerShown: true, title: t('screens.signIn') }}
+        options={{ ...authHeaderOptions, headerShown: true, title: '' }}
       />
       <AuthStack.Screen
         name="EnterEmail"
         component={EnterEmailScreen}
-        options={{ ...authHeaderOptions, headerShown: true, title: t('screens.enterEmail') }}
+        options={{ ...authHeaderOptions, headerShown: true, title: '' }}
       />
       <AuthStack.Screen
         name="VerifyCode"
         component={VerifyCodeScreen}
-        options={{ ...authHeaderOptions, headerShown: true, title: t('screens.verifyCode') }}
+        options={{ ...authHeaderOptions, headerShown: true, title: '' }}
       />
       <AuthStack.Screen
         name="ChangePassword"
         component={ChangePasswordScreen}
-        options={{ ...authHeaderOptions, headerShown: true, title: t('screens.changePassword') }}
+        options={{ ...authHeaderOptions, headerShown: true, title: '' }}
       />
       <AuthStack.Screen name="Done" component={DoneScreen} />
     </AuthStack.Navigator>
@@ -108,13 +115,16 @@ function AppNavigatorInner() {
     headerBackTitleVisible: false,
     headerBackButtonDisplayMode: 'minimal',
   }), [colors]);
+  const authHeaderOptions = useMemo(() => ({
+    ...headerWithBackOptions,
+    headerStyle: { backgroundColor: colors.secondaryBackground },
+  }), [headerWithBackOptions, colors.secondaryBackground]);
   return (
     <AILawyerChatProvider>
       <AppStack.Navigator screenOptions={{ headerShown: false }}>
         <AppStack.Screen
           name="Home"
           component={HomeTabNavigator}
-          options={{ freezeOnBlur: false }}
         />
         <AppStack.Screen
           name="Details"
@@ -161,9 +171,20 @@ function AppNavigatorInner() {
           options={{ ...headerWithBackOptions, headerShown: true, title: t('screens.sendIdea') }}
         />
         <AppStack.Screen
-          name="Subscription"
-          component={SubscriptionScreen}
-          options={{ ...headerWithBackOptions, headerShown: true, title: t('screens.subscription'), headerStyle: { backgroundColor: colors.secondaryBackground } }}
+          name="GetStartedFromSettings"
+          component={GetStartedScreen}
+          initialParams={{ fromSettings: true }}
+          options={{ ...headerWithBackOptions, headerShown: true, title: '' }}
+        />
+        <AppStack.Screen
+          name="SignUp"
+          component={SignUpScreen}
+          options={{ ...authHeaderOptions, headerShown: true, title: '' }}
+        />
+        <AppStack.Screen
+          name="SignIn"
+          component={SignInScreen}
+          options={{ ...authHeaderOptions, headerShown: true, title: '' }}
         />
         <AppStack.Screen name="Scanner" component={ScannerScreen} />
         <AppStack.Screen
@@ -203,10 +224,12 @@ function AppNavigatorInner() {
 
 export default function AppNavigator({ onNavigationRefReady }) {
   const { session, user, isLoading, pendingPasswordReset } = useAuth();
+  const { isGuest, isLoaded: guestLoaded } = useGuest();
+  const { openSubscriptionBottomSheet } = useSubscription();
   const { colors } = useTheme();
   const navigationRef = useNavigationContainerRef();
   const isAuthenticated = !!(session?.access_token && user?.id);
-  const showAuthStack = !isAuthenticated || pendingPasswordReset;
+  const showAuthStack = pendingPasswordReset || (!isAuthenticated && !isGuest);
 
   React.useEffect(() => {
     onNavigationRefReady?.(navigationRef);
@@ -217,7 +240,7 @@ export default function AppNavigator({ onNavigationRefReady }) {
       const offerId = parseOfferDeepLink(url);
       if (offerId == null || showAuthStack) return;
       setTimeout(() => {
-        navigationRef.current?.navigate('Subscription', { fromOffer: true, offerId: String(offerId) });
+        openSubscriptionBottomSheet?.({ offerId: String(offerId), offerProductId: 'pro_yearly_offer' });
       }, 100);
     };
     Linking.getInitialURL().then((url) => {
@@ -225,9 +248,9 @@ export default function AppNavigator({ onNavigationRefReady }) {
     });
     const sub = Linking.addEventListener('url', ({ url }) => handleUrl(url));
     return () => sub.remove();
-  }, [showAuthStack]);
+  }, [showAuthStack, openSubscriptionBottomSheet]);
 
-  if (isLoading) {
+  if (isLoading || !guestLoaded) {
     return (
       <View style={[styles.loader, { backgroundColor: colors.primaryBackground }]}>
         <ActivityIndicator size="large" color={colors.primary} />
@@ -235,9 +258,16 @@ export default function AppNavigator({ onNavigationRefReady }) {
     );
   }
 
-  return (
-    <NavigationContainer ref={navigationRef}>
-      {showAuthStack ? <AuthNavigator /> : <AppNavigatorInner />}
+  // На Android при смене Auth → App один и тот же NavigationContainer может сохранять
+  // нативное состояние и ломать тачи. Рендерим два разных контейнера с ключами:
+  // при смене стека контейнер полностью размонтируется и монтируется заново.
+  return showAuthStack ? (
+    <NavigationContainer key="auth" ref={navigationRef}>
+      <AuthNavigator />
+    </NavigationContainer>
+  ) : (
+    <NavigationContainer key="app" ref={navigationRef}>
+      <AppNavigatorInner />
     </NavigationContainer>
   );
 }

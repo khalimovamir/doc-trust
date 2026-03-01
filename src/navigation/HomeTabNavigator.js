@@ -1,6 +1,7 @@
 /**
  * Home Tab Navigator
  * Tabs: Home, History, AI Lawyer, Settings
+ * On Android: native tab bar requires icon objects (materialSymbol), not React elements.
  */
 
 import React from 'react';
@@ -26,87 +27,85 @@ function HomeTabNavigatorInner() {
         tabBarActiveTintColor: colors?.primary ?? '#3b82f6',
         tabBarInactiveTintColor: colors?.secondaryText ?? '#6b7280',
         tabBarStyle: { backgroundColor: colors?.secondaryBackground ?? '#ffffff' },
-        // Keep tab screens mounted so content is not cleared when switching tabs
-        detachInactiveScreens: false,
         ...(Platform.OS === 'android' && {
           tabBarIconStyle: { width: 24, height: 24 },
           tabBarLabelVisibilityMode: 'labeled',
         }),
       }}
     >
-      <Tab.Screen
-        name="HomeTab"
-        component={HomeScreen}
-        options={{
-          title: t('tabs.home'),
-          tabBarIcon: Platform.select({
-            ios: ({ focused }) => ({
-              type: 'sfSymbol',
-              name: focused ? 'square.grid.2x2.fill' : 'square.grid.2x2',
+        <Tab.Screen
+          name="HomeTab"
+          component={HomeScreen}
+          options={{
+            title: t('tabs.home'),
+            tabBarIcon: Platform.select({
+              ios: ({ focused }) => ({
+                type: 'sfSymbol',
+                name: focused ? 'square.grid.2x2.fill' : 'square.grid.2x2',
+              }),
+              default: () => ({
+                type: 'materialSymbol',
+                name: 'grid_view',
+                weight: 400,
+              }),
             }),
-            default: () => ({
-              type: 'materialSymbol',
-              name: 'grid_view',
-              weight: 400,
+          }}
+        />
+        <Tab.Screen
+          name="History"
+          component={HistoryScreen}
+          options={{
+            title: t('tabs.history'),
+            tabBarIcon: Platform.select({
+              ios: ({ focused }) => ({
+                type: 'sfSymbol',
+                name: focused ? 'clock.fill' : 'clock',
+              }),
+              default: () => ({
+                type: 'materialSymbol',
+                name: 'schedule',
+                weight: 400,
+              }),
             }),
-          }),
-        }}
-      />
-      <Tab.Screen
-        name="History"
-        component={HistoryScreen}
-        options={{
-          title: t('tabs.history'),
-          tabBarIcon: Platform.select({
-            ios: ({ focused }) => ({
-              type: 'sfSymbol',
-              name: focused ? 'clock.fill' : 'clock',
+          }}
+        />
+        <Tab.Screen
+          name="AILawyerTab"
+          component={AILawyerScreen}
+          options={{
+            title: t('tabs.aiLawyer'),
+            headerShown: false,
+            tabBarIcon: Platform.select({
+              ios: ({ focused }) => ({
+                type: 'sfSymbol',
+                name: focused ? 'sparkles' : 'sparkles',
+              }),
+              default: () => ({
+                type: 'materialSymbol',
+                name: 'auto_awesome',
+                weight: 400,
+              }),
             }),
-            default: () => ({
-              type: 'materialSymbol',
-              name: 'schedule',
-              weight: 400,
+          }}
+        />
+        <Tab.Screen
+          name="Settings"
+          component={SettingsScreen}
+          options={{
+            title: t('tabs.settings'),
+            tabBarIcon: Platform.select({
+              ios: ({ focused }) => ({
+                type: 'sfSymbol',
+                name: focused ? 'gearshape.fill' : 'gearshape',
+              }),
+              default: () => ({
+                type: 'materialSymbol',
+                name: 'settings',
+                weight: 400,
+              }),
             }),
-          }),
-        }}
-      />
-      <Tab.Screen
-        name="AILawyerTab"
-        component={AILawyerScreen}
-        options={{
-          title: t('tabs.aiLawyer'),
-          headerShown: false,
-          tabBarIcon: Platform.select({
-            ios: ({ focused }) => ({
-              type: 'sfSymbol',
-              name: focused ? 'sparkles' : 'sparkles',
-            }),
-            default: () => ({
-              type: 'materialSymbol',
-              name: 'auto_awesome',
-              weight: 400,
-            }),
-          }),
-        }}
-      />
-      <Tab.Screen
-        name="Settings"
-        component={SettingsScreen}
-        options={{
-          title: t('tabs.settings'),
-          tabBarIcon: Platform.select({
-            ios: ({ focused }) => ({
-              type: 'sfSymbol',
-              name: focused ? 'gearshape.fill' : 'gearshape',
-            }),
-            default: () => ({
-              type: 'materialSymbol',
-              name: 'settings',
-              weight: 400,
-            }),
-          }),
-        }}
-      />
+          }}
+        />
     </Tab.Navigator>
   );
 }

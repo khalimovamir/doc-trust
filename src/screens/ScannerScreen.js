@@ -15,15 +15,16 @@ import {
   Animated,
   Modal,
   Dimensions,
+  InteractionManager,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useFocusEffect } from '@react-navigation/native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as MediaLibrary from 'expo-media-library';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { BlurView } from 'expo-blur';
 import { X, Plus, ChevronLeft, Check, Info, FileScan, Zap } from 'lucide-react-native';
 import { fontFamily, spacing, useTheme } from '../theme';
+import { useSubscription } from '../context/SubscriptionContext';
 import IconButton from '../components/IconButton';
 
 const MAX_SCANS = 20;
@@ -70,6 +71,58 @@ function createStyles(colors) {
     scanPlaceholder: { flex: 1, width: '100%', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
     scanPlaceholderIcon: { marginBottom: 16, opacity: 0.7 },
     scanPlaceholderText: { fontFamily, fontSize: 17, color: 'rgba(255,255,255,0.85)', textAlign: 'center' },
+    scanAreaWrap: { flex: 1 },
+    bottomStrip: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 10,
+      elevation: 10,
+    },
+    limitCardWrap: {
+      marginHorizontal: 16,
+      marginBottom: 12,
+    },
+    bottomSection: {
+      backgroundColor: '#000',
+    },
+    limitCard: {
+      height: 46,
+      borderRadius: 23,
+      backgroundColor: 'rgba(0,0,0,0.3)',
+      borderWidth: 1,
+      borderColor: '#000',
+      paddingLeft: 14,
+      paddingRight: 4,
+      paddingTop: 4,
+      paddingBottom: 4,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    limitCardText: {
+      fontFamily,
+      fontSize: 16,
+      fontWeight: '400',
+      color: '#ffffff',
+    },
+    limitCardButton: {
+      height: 38,
+      paddingHorizontal: 16,
+      borderRadius: 19,
+      backgroundColor: '#ffffff',
+      borderWidth: 1,
+      borderColor: '#000',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    limitCardButtonText: {
+      fontFamily,
+      fontSize: 14,
+      fontWeight: '500',
+      color: '#000000',
+    },
     cardsRowWrap: { backgroundColor: '#000', paddingTop: 8, paddingBottom: spacing.sm, overflow: 'visible' },
     cardsRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, paddingTop: 10, gap: spacing.sm },
     cardWrap: { position: 'relative' },
@@ -209,14 +262,10 @@ function createStyles(colors) {
       paddingBottom: 20,
       paddingHorizontal: 0,
     },
-    guideCardBlur: {
-      ...StyleSheet.absoluteFillObject,
-      borderRadius: 24,
-    },
     guideCardTint: {
       ...StyleSheet.absoluteFillObject,
-      borderRadius: 24,
-      backgroundColor: 'rgba(58,58,62,0.92)',
+      borderRadius: 32,
+      backgroundColor: 'rgba(58,58,62,0.98)',
     },
     guideScrollWrap: {
       width: '100%',
@@ -265,10 +314,13 @@ function createStyles(colors) {
 export default function ScannerScreen({ navigation }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
+  const { isPro, usage, isLoading, openSubscriptionIfLimitReached, openSubscriptionBottomSheet, refreshSubscription } = useSubscription();
+  const scanDocumentRemaining = usage?.scan_document != null ? Math.max(0, usage.scan_document) : null;
   const styles = useMemo(() => StyleSheet.create(createStyles(colors)), [colors]);
   const captureScale = useRef(new Animated.Value(1)).current;
   const cameraRef = useRef(null);
   const [permission, requestPermission] = useCameraPermissions();
+  const [cameraReady, setCameraReady] = useState(false);
 
   const [scans, setScans] = useState([]);
   const [slotCount, setSlotCount] = useState(5);
@@ -290,7 +342,18 @@ export default function ScannerScreen({ navigation }) {
   useEffect(() => {
     if (!permission?.granted) {
       requestPermission();
+      setCameraReady(false);
+      return;
     }
+    setCameraReady(false);
+    let timeoutId;
+    const interactionHandle = InteractionManager.runAfterInteractions(() => {
+      timeoutId = setTimeout(() => setCameraReady(true), 600);
+    });
+    return () => {
+      if (interactionHandle?.cancel) interactionHandle.cancel();
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [permission?.granted, requestPermission]);
 
   const checkGalleryPermission = useCallback(async () => {
@@ -302,6 +365,12 @@ export default function ScannerScreen({ navigation }) {
   useEffect(() => {
     checkGalleryPermission();
   }, [checkGalleryPermission]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshSubscription?.();
+    }, [refreshSubscription])
+  );
 
   useEffect(() => {
     const selected = scans[targetSlotIndex];
@@ -325,41 +394,44 @@ export default function ScannerScreen({ navigation }) {
   }, [t, ImagePicker]);
 
   const addScanAt = useCallback((uri, mimeType, atIndex) => {
+    if (!uri) return;
+    const mime = mimeType || 'image/jpeg';
     setScans((prev) => {
       const next = [...prev];
-      next.splice(atIndex, 0, { uri, mimeType: mimeType || 'image/jpeg' });
-      const result = next.slice(0, MAX_SCANS);
-      if (result.length === slotCount && slotCount < MAX_SCANS) {
-        setSlotCount((s) => Math.min(s + 1, MAX_SCANS));
-      }
-      return result;
+      next.splice(atIndex, 0, { uri, mimeType: mime });
+      return next.slice(0, MAX_SCANS);
     });
+    const nextLen = scans.length + 1;
+    if (nextLen >= slotCount && slotCount < MAX_SCANS) {
+      setSlotCount((s) => Math.min(MAX_SCANS, s + 1));
+    }
     setTargetSlotIndex((prev) => Math.min(prev + 1, MAX_SCANS - 1));
     setError('');
-  }, [slotCount]);
+  }, [scans.length, slotCount]);
 
   const addScansAt = useCallback((images, startIndex) => {
     if (!images?.length) return;
+    const count = images.length;
     setScans((prev) => {
       let next = [...prev];
       let at = startIndex;
       for (const img of images) {
-        next.splice(at, 0, { uri: img.uri, mimeType: img.type || 'image/jpeg' });
-        at++;
+        if (img?.uri) {
+          next.splice(at, 0, { uri: img.uri, mimeType: img.type || 'image/jpeg' });
+          at++;
+        }
       }
-      const result = next.slice(0, MAX_SCANS);
-      if (result.length >= slotCount && slotCount < MAX_SCANS) {
-        setSlotCount((s) => Math.min(MAX_SCANS, Math.max(s, result.length + 1)));
-      }
-      return result;
+      return next.slice(0, MAX_SCANS);
     });
-    setTargetSlotIndex((prev) => Math.min(prev + images.length, MAX_SCANS - 1));
+    const nextLen = scans.length + count;
+    setSlotCount((s) => Math.min(MAX_SCANS, Math.max(s, nextLen)));
+    setTargetSlotIndex((prev) => Math.min(prev + count, MAX_SCANS - 1));
     setError('');
-  }, [slotCount]);
+  }, [scans.length, slotCount]);
 
   const removeScan = useCallback((index) => {
     setScans((prev) => prev.filter((_, i) => i !== index));
-    setTargetSlotIndex((prev) => Math.min(prev, Math.max(0, scans.length - 1)));
+    setTargetSlotIndex((prev) => Math.min(prev, Math.max(0, scans.length - 2)));
     setError('');
   }, [scans.length]);
 
@@ -369,14 +441,16 @@ export default function ScannerScreen({ navigation }) {
       const ok = await requestPermission();
       if (!ok) return;
     }
-    if (!cameraRef.current) return;
+    const camera = cameraRef.current;
+    if (!camera || typeof camera.takePictureAsync !== 'function') return;
     try {
-      const photo = await cameraRef.current.takePictureAsync({ quality: 0.9 });
+      const photo = await camera.takePictureAsync({ quality: 0.9 });
       if (photo?.uri) {
         addScanAt(photo.uri, 'image/jpeg', targetSlotIndex);
       }
     } catch (e) {
-      Alert.alert(t('common.error'), e?.message || t('scanner.noTextFound'));
+      const msg = e?.message ?? (typeof e === 'string' ? e : t('scanner.noTextFound'));
+      Alert.alert(t('common.error'), msg);
     }
   }, [scans.length, slotCount, permission?.granted, requestPermission, addScanAt, targetSlotIndex, t]);
 
@@ -406,10 +480,11 @@ export default function ScannerScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       checkGalleryPermission();
-      requestGalleryPermission().then((granted) => {
-        if (granted) fetchLastDevicePhoto();
-      });
-    }, [checkGalleryPermission, requestGalleryPermission, fetchLastDevicePhoto])
+      const deferred = setTimeout(() => {
+        if (galleryGranted) fetchLastDevicePhoto();
+      }, 1200);
+      return () => clearTimeout(deferred);
+    }, [checkGalleryPermission, fetchLastDevicePhoto, galleryGranted])
   );
 
   useEffect(() => {
@@ -439,13 +514,15 @@ export default function ScannerScreen({ navigation }) {
   }, [scans.length, slotCount, requestGalleryPermission, addScanAt, addScansAt, targetSlotIndex, ImagePicker]);
 
   const handleStartAnalyzing = useCallback(() => {
-    if (scans.length === 0) return;
+    const validScans = scans.filter((s) => s?.uri);
+    if (validScans.length === 0) return;
+    if (!openSubscriptionIfLimitReached('scan_document', navigation)) return;
     setError('');
     navigation.navigate('Analyzing', {
-      scanImages: scans.map((s) => ({ uri: s.uri, mimeType: s.mimeType || 'image/jpeg' })),
+      scanImages: validScans.map((s) => ({ uri: s.uri, mimeType: s.mimeType || 'image/jpeg' })),
       source: 'scan',
     });
-  }, [scans, navigation]);
+  }, [scans, navigation, openSubscriptionIfLimitReached]);
 
   const canAddMore = slotCount < MAX_SCANS;
   const hasScans = scans.length > 0;
@@ -463,7 +540,7 @@ export default function ScannerScreen({ navigation }) {
 
   const onGuideScroll = useCallback(
     (e) => {
-      const x = e.nativeEvent.contentOffset.x;
+      const x = e?.nativeEvent?.contentOffset?.x ?? 0;
       const index = Math.round(x / guideSlideWidth);
       setGuideSlideIndex(Math.min(3, Math.max(0, index)));
     },
@@ -493,7 +570,6 @@ export default function ScannerScreen({ navigation }) {
         <View style={styles.guideOverlay}>
           <View style={styles.guideOverlayDark} pointerEvents="box-none" />
           <View style={styles.guideCard} pointerEvents="box-none">
-            <BlurView intensity={50} tint="dark" style={styles.guideCardBlur} />
             <View style={styles.guideCardTint} pointerEvents="none" />
             <View style={[styles.guideScrollWrap, { width: guideSlideWidth }]}>
               <ScrollView
@@ -538,24 +614,36 @@ export default function ScannerScreen({ navigation }) {
         </View>
       </Modal>
 
-      <View style={styles.scanArea}>
-        {selectedScan ? (
-          <Image source={{ uri: selectedScan.uri }} style={styles.scanPreview} resizeMode="contain" />
-        ) : permission?.granted ? (
-          <CameraView ref={cameraRef} style={styles.scanPreview} enableTorch={torchOn} />
-        ) : (
-          <View style={styles.scanPlaceholder}>
-            <View style={styles.scanPlaceholderIcon}>
-              <FileScan size={64} color="rgba(255,255,255,0.6)" strokeWidth={1.5} />
+      <View style={styles.scanAreaWrap}>
+        <View style={styles.scanArea}>
+          {permission?.granted && cameraReady ? (
+            <>
+              <CameraView ref={cameraRef} style={styles.scanPreview} enableTorch={torchOn} />
+              {selectedScan?.uri ? (
+                <View style={[StyleSheet.absoluteFill, { overflow: 'hidden', backgroundColor: '#000' }]} pointerEvents="none">
+                  <Image
+                    source={{ uri: selectedScan.uri }}
+                    style={styles.scanPreview}
+                    resizeMode="contain"
+                    onError={() => setError('')}
+                  />
+                </View>
+              ) : null}
+            </>
+          ) : (
+            <View style={styles.scanPlaceholder}>
+              <View style={styles.scanPlaceholderIcon}>
+                <FileScan size={64} color="rgba(255,255,255,0.6)" strokeWidth={1.5} />
+              </View>
+              <Text style={styles.scanPlaceholderText}>{t('scanner.tapToScan')}</Text>
             </View>
-            <Text style={styles.scanPlaceholderText}>{t('scanner.tapToScan')}</Text>
-          </View>
-        )}
-        {error ? (
-          <View style={styles.errorBanner}>
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        ) : null}
+          )}
+          {error ? (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
+        </View>
       </View>
 
       <SafeAreaView style={[StyleSheet.absoluteFill, styles.topOverlay]} edges={['top']} pointerEvents="box-none">
@@ -568,7 +656,7 @@ export default function ScannerScreen({ navigation }) {
             <ChevronLeft size={24} color="#fff" strokeWidth={2} />
           </TouchableOpacity>
           <View style={styles.topRowRight}>
-            {permission?.granted && (
+            {permission?.granted && cameraReady && (
               <TouchableOpacity
                 style={styles.controlButton}
                 onPress={() => setTorchOn((on) => !on)}
@@ -585,9 +673,11 @@ export default function ScannerScreen({ navigation }) {
             <TouchableOpacity
               style={styles.controlButton}
               onPress={() => {
-              setGuideSlideIndex(0);
-              setInfoGuideVisible(true);
-            }}
+                setGuideSlideIndex(0);
+                InteractionManager.runAfterInteractions(() => {
+                  setTimeout(() => setInfoGuideVisible(true), 400);
+                });
+              }}
               activeOpacity={0.8}
             >
               <Info size={22} color="#fff" strokeWidth={2} />
@@ -596,7 +686,25 @@ export default function ScannerScreen({ navigation }) {
         </View>
       </SafeAreaView>
 
-      <View style={styles.cardsRowWrap}>
+      <View style={styles.bottomStrip}>
+        {!isPro && (
+          <View style={styles.limitCardWrap}>
+            <View style={styles.limitCard}>
+              <Text style={styles.limitCardText}>
+                {t('scanner.yourLimit', { count: scanDocumentRemaining ?? (isLoading ? '...' : 0) })}
+              </Text>
+              <TouchableOpacity
+                style={styles.limitCardButton}
+                onPress={() => openSubscriptionBottomSheet?.()}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.limitCardButtonText}>{t('settings.upgrade')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+        <View style={styles.bottomSection}>
+        <View style={styles.cardsRowWrap}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.cardsRow}>
           {Array.from({ length: slotCount }, (_, index) => {
             const scan = scans[index];
@@ -654,7 +762,7 @@ export default function ScannerScreen({ navigation }) {
               <Image source={{ uri: lastDevicePhotoUri ?? lastGalleryUri }} style={styles.galleryThumbImage} resizeMode="cover" />
             ) : (
               <View style={styles.galleryThumbPlaceholder}>
-                <Text style={styles.galleryThumbPlaceholderText}>📷</Text>
+                <Text style={styles.galleryThumbPlaceholderText}>🖼</Text>
               </View>
             )}
           </TouchableOpacity>
@@ -688,6 +796,8 @@ export default function ScannerScreen({ navigation }) {
             <View style={styles.captureSpacer} />
           )}
         </View>
+      </View>
+      </View>
       </View>
     </View>
   );

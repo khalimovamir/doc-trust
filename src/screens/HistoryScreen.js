@@ -18,7 +18,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { fontFamily, spacing, borderRadius, useTheme } from '../theme';
 import { useAuth } from '../context/AuthContext';
+import { useGuest } from '../context/GuestContext';
 import { getAnalysesForUserWithCache } from '../lib/documents';
+import { getGuestAnalysesList } from '../lib/guestAnalysisStorage';
 import { formatDateShort } from '../lib/dateFormat';
 import { FileText } from 'lucide-react-native';
 import { ScoreRing, detailsCreateStyles } from './DetailsScreen';
@@ -77,6 +79,7 @@ export default function HistoryScreen({ navigation }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const { user } = useAuth();
+  const { isGuest } = useGuest();
   const [activeFilter, setActiveFilter] = useState('all');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -85,6 +88,30 @@ export default function HistoryScreen({ navigation }) {
   const filters = FILTER_IDS.map((f) => ({ ...f, label: t(f.labelKey) }));
 
   const fetchItems = useCallback(() => {
+    if (isGuest) {
+      setLoading(true);
+      getGuestAnalysesList()
+        .then((data) => {
+          setItems(
+            data.map((a) => {
+              const tags = [a.documentType || t('home.document')];
+              if (a.risksCount > 0) tags.push(`${a.risksCount} ${t('home.risks')}`);
+              if (a.tipsCount > 0) tags.push(`${a.tipsCount} ${t('home.tips')}`);
+              tags.push(t(getRiskLabelKey(a.score)));
+              return {
+                id: a.id,
+                title: a.documentType || t('home.document'),
+                tags,
+                date: formatDateShort(a.createdAt),
+                score: a.score ?? 0,
+              };
+            })
+          );
+        })
+        .catch(() => setItems([]))
+        .finally(() => setLoading(false));
+      return;
+    }
     if (!user?.id) {
       setItems([]);
       setLoading(false);
@@ -111,7 +138,7 @@ export default function HistoryScreen({ navigation }) {
       })
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
-  }, [user?.id, t]);
+  }, [user?.id, isGuest, t]);
 
   useFocusEffect(useCallback(() => { fetchItems(); }, [fetchItems]));
 

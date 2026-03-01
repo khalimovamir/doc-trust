@@ -96,7 +96,7 @@ export default function AnalyzingScreen({ navigation, route }) {
             index: 1,
             routes: [
               { name: 'Home' },
-              { name: 'AnalysisResult', params: { documentText, source } },
+              { name: 'AnalysisResult', params: { documentText, source, fromAnalyzing: true } },
             ],
           })
         );

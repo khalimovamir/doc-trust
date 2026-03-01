@@ -17,6 +17,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { FileText, X } from 'lucide-react-native';
 import { fontFamily, spacing, borderRadius, useTheme } from '../theme';
+import { useSubscription } from '../context/SubscriptionContext';
 import { pickDocumentAndGetText } from '../lib/uploadDocument';
 import { NativeHeaderButtonInfo } from '../components/NativeHeaderButton';
 
@@ -68,6 +69,7 @@ function createStyles(colors) {
 export default function UploadFileScreen({ navigation }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
+  const { openSubscriptionIfLimitReached } = useSubscription();
   const styles = useMemo(() => StyleSheet.create(createStyles(colors)), [colors]);
   const [documentText, setDocumentText] = useState('');
   const [fileName, setFileName] = useState('');
@@ -139,6 +141,7 @@ export default function UploadFileScreen({ navigation }) {
       setError(t('uploadFile.errorSelectFirst'));
       return;
     }
+    if (!openSubscriptionIfLimitReached('document_check', navigation)) return;
     navigation.navigate('Analyzing', { documentText: trimmed, source: 'upload' });
   };
 

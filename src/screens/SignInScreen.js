@@ -22,6 +22,7 @@ import { fontFamily, spacing, useTheme } from '../theme';
 import FormInput from '../components/FormInput';
 import PrimaryButton from '../components/PrimaryButton';
 import IconButton from '../components/IconButton';
+import { CommonActions } from '@react-navigation/native';
 import { signInWithEmail } from '../lib/auth';
 import { isValidEmail } from '../lib/validation';
 
@@ -72,7 +73,12 @@ export default function SignInScreen({ navigation }) {
     setLoading(true);
     try {
       await signInWithEmail(trimmedEmail, password);
-      // Session updates → AuthContext → navigator switches to AppStack automatically
+      // If we're in AppStack (guest opened SignIn from Settings), go to Home
+      const root = navigation.getParent();
+      const routeNames = root?.getState()?.routeNames ?? [];
+      if (routeNames.includes('Home')) {
+        root.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'Home' }] }));
+      }
     } catch (e) {
       setPasswordError(e?.message || t('auth.signInFailed'));
       Alert.alert(t('auth.signInError'), e?.message || t('auth.couldNotSignIn'));

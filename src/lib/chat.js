@@ -1,8 +1,16 @@
 /**
- * Doc Trust - Chat persistence (Supabase)
+ * Doc Trust - Chat persistence (Supabase + local cache for two-way / offline)
  */
 
 import { supabase } from './supabase';
+import {
+  getCachedChatsList,
+  setCachedChatsList,
+  getCachedChatMessages,
+  setCachedChatMessages,
+  getCachedChatMeta,
+  setCachedChatMeta,
+} from './chatCache';
 
 /**
  * Find existing chat for this document analysis (from Details)
@@ -48,73 +56,102 @@ export async function createChat(userId, title = 'New chat', context = null, ana
 }
 
 /**
- * Get user's chats, most recent first (with context for restoring when opening)
+ * Get user's chats, most recent first (with context for restoring when opening).
+ * Saves to local cache on success; returns cache on network failure.
  */
 export async function getChats(userId) {
-  const { data, error } = await supabase
-    .from('chats')
-    .select('id, title, context_type, context_title, context_data, created_at, updated_at')
-    .eq('user_id', userId)
-    .order('updated_at', { ascending: false })
-    .limit(50);
-  if (error) throw error;
-  return data || [];
+  try {
+    const { data, error } = await supabase
+      .from('chats')
+      .select('id, title, context_type, context_title, context_data, created_at, updated_at')
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false })
+      .limit(50);
+    if (error) throw error;
+    const list = data || [];
+    await setCachedChatsList(userId, list);
+    return list;
+  } catch (e) {
+    const cached = await getCachedChatsList(userId);
+    return cached;
+  }
 }
 
 /**
- * Get a single chat by id
+ * Get a single chat by id. Saves to local cache on success; returns cache on failure.
  */
 export async function getChat(chatId) {
-  const { data, error } = await supabase
-    .from('chats')
-    .select('id, title, context_type, context_title, context_data')
-    .eq('id', chatId)
-    .single();
-  if (error) throw error;
-  return data;
+  try {
+    const { data, error } = await supabase
+      .from('chats')
+      .select('id, title, context_type, context_title, context_data')
+      .eq('id', chatId)
+      .single();
+    if (error) throw error;
+    if (data) await setCachedChatMeta(chatId, data);
+    return data;
+  } catch (e) {
+    return await getCachedChatMeta(chatId);
+  }
 }
 
 /**
- * Get most recent chat (or null)
+ * Get most recent chat (or null). Uses cached list on network failure.
  */
 export async function getMostRecentChat(userId) {
-  const { data, error } = await supabase
-    .from('chats')
-    .select('id, title, context_type, context_title, context_data')
-    .eq('user_id', userId)
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .single();
-  if (error && error.code !== 'PGRST116') throw error;
-  return data;
+  try {
+    const { data, error } = await supabase
+      .from('chats')
+      .select('id, title, context_type, context_title, context_data')
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .single();
+    if (error && error.code !== 'PGRST116') throw error;
+    return data;
+  } catch (e) {
+    const list = await getCachedChatsList(userId);
+    return list[0] || null;
+  }
 }
 
 /**
- * Get messages for a chat
+ * Get messages for a chat. Saves to local cache on success; returns cache on failure.
  */
 export async function getChatMessages(chatId) {
-  const { data, error } = await supabase
-    .from('chat_messages')
-    .select('id, role, content, created_at, image_url')
-    .eq('chat_id', chatId)
-    .order('created_at', { ascending: true });
-  if (error) throw error;
-  return data || [];
+  try {
+    const { data, error } = await supabase
+      .from('chat_messages')
+      .select('id, role, content, created_at, image_url')
+      .eq('chat_id', chatId)
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    const msgs = data || [];
+    await setCachedChatMessages(chatId, msgs);
+    return msgs;
+  } catch (e) {
+    return await getCachedChatMessages(chatId);
+  }
 }
 
 /**
- * Get last message of a chat (for list preview)
+ * Get last message of a chat (for list preview). Uses cached messages on failure.
  */
 export async function getChatLastMessage(chatId) {
-  const { data, error } = await supabase
-    .from('chat_messages')
-    .select('content, created_at')
-    .eq('chat_id', chatId)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw error;
-  return data;
+  try {
+    const { data, error } = await supabase
+      .from('chat_messages')
+      .select('content, created_at')
+      .eq('chat_id', chatId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
+  } catch (e) {
+    const msgs = await getCachedChatMessages(chatId);
+    return msgs.length > 0 ? { content: msgs[msgs.length - 1].content, created_at: msgs[msgs.length - 1].created_at } : null;
+  }
 }
 
 const CHAT_IMAGES_BUCKET = 'chat-images';
@@ -154,7 +191,7 @@ export async function uploadChatImage(userId, chatId, localUri) {
 }
 
 /**
- * Add a message to a chat
+ * Add a message to a chat. Appends to local cache on success.
  * @param {string} [imageUrl] - public URL of image uploaded to chat-images bucket
  */
 export async function addChatMessage(chatId, role, content, _contextText = null, imageUrl = null) {
@@ -162,6 +199,9 @@ export async function addChatMessage(chatId, role, content, _contextText = null,
   if (imageUrl) row.image_url = imageUrl;
   const { data, error } = await supabase.from('chat_messages').insert(row).select('id, created_at, image_url').single();
   if (error) throw error;
+  const existing = await getCachedChatMessages(chatId);
+  const newMsg = { id: data.id, role, content, created_at: data.created_at, ...(data.image_url && { image_url: data.image_url }) };
+  await setCachedChatMessages(chatId, [...existing, newMsg]);
   return data;
 }
 

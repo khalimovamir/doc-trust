@@ -19,6 +19,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { FileText, ArrowUpDown, X } from 'lucide-react-native';
 import { fontFamily, spacing, borderRadius, useTheme } from '../theme';
+import { useSubscription } from '../context/SubscriptionContext';
 import IconButton from '../components/IconButton';
 import { NativeHeaderButtonInfo } from '../components/NativeHeaderButton';
 import { pickDocumentAndGetText } from '../lib/uploadDocument';
@@ -67,6 +68,7 @@ function createStyles(colors) {
 export default function CompareDocsScreen({ navigation, route }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
+  const { openSubscriptionIfLimitReached } = useSubscription();
   const styles = useMemo(() => StyleSheet.create(createStyles(colors)), [colors]);
   const [doc1, setDoc1] = useState(null); // { text, fileName }
   const [doc2, setDoc2] = useState(null);
@@ -125,6 +127,7 @@ export default function CompareDocsScreen({ navigation, route }) {
       setError(t('compareDocs.errorSelectBoth'));
       return;
     }
+    if (!openSubscriptionIfLimitReached('document_compare', navigation)) return;
     navigation.navigate('Comparing', {
       document1Text: doc1.text.trim(),
       document2Text: doc2.text.trim(),

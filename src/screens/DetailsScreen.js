@@ -34,23 +34,26 @@ import Svg, { Circle as SvgCircle } from 'react-native-svg';
 import { fontFamily, spacing, useTheme } from '../theme';
 import { SkeletonDetails } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
+import { useGuest } from '../context/GuestContext';
 import { useAILawyerChat } from '../context/AILawyerChatContext';
 import { useAnalysis } from '../context/AnalysisContext';
 import { useProfile } from '../context/ProfileContext';
 import { useTranslation } from 'react-i18next';
 import { getAnalysisByIdCached, updateGuidanceItemDone, deleteAnalysisWithRelated } from '../lib/documents';
+import { getGuestAnalysisById, deleteGuestAnalysis } from '../lib/guestAnalysisStorage';
 import { createChat, addChatMessage, getChatByAnalysisId } from '../lib/chat';
+import { createGuestChat, addGuestChatMessage } from '../lib/guestChatStorage';
 import { getDocumentChatInitial } from '../lib/chatGreeting';
 import { formatDateShort, formatDateLocalized } from '../lib/dateFormat';
 import { exportAnalysisToPdf } from '../lib/exportPdf';
 
 const TABS_KEYS = ['tabSummary', 'tabRedFlags', 'tabGuidance'];
 
-/* ── Segmented Control (3 tabs, iOS-style, draggable indicator) ── */
-const SEGMENT_PADDING = 4;
-const SEGMENT_HEIGHT = 42;
-const SEGMENT_RADIUS = 12;
-const INDICATOR_RADIUS = 9;
+/* ── Segmented Control (iOS UISegmentedControl-style, draggable indicator) ── */
+const SEGMENT_PADDING = 3;
+const SEGMENT_HEIGHT = 36;
+const SEGMENT_RADIUS = 10;
+const INDICATOR_RADIUS = 8;
 
 function DraggableSegmentedControl({ activeIndex, onIndexChange, labels, styles }) {
   const { colors } = useTheme();
@@ -70,28 +73,42 @@ function DraggableSegmentedControl({ activeIndex, onIndexChange, labels, styles 
     return () => indicatorX.removeListener(id);
   }, []);
 
-  const onSegmentLayout = (e) => {
-    const w = e.nativeEvent.layout.width;
-    if (w > 0 && w !== segmentWidth) {
-      setSegmentWidth(w);
-      const tw = (w - SEGMENT_PADDING * 2) / count;
-      const val = activeIndex * tw;
-      indicatorX.setValue(val);
-      currentX.current = val;
-    }
-  };
+  const onSegmentLayout = useCallback(
+    (e) => {
+      const w = e.nativeEvent.layout.width;
+      if (w > 0) setSegmentWidth((prev) => (prev !== w ? w : prev));
+    },
+    []
+  );
 
-  const switchTab = useCallback((index) => {
+  const switchTab = useCallback(
+    (index) => {
+      const tw = tabWidthRef.current;
+      if (tw <= 0) return;
+      Animated.timing(indicatorX, {
+        toValue: index * tw,
+        duration: 200,
+        useNativeDriver: false,
+      }).start();
+      if (typeof onIndexChangeRef.current === 'function') onIndexChangeRef.current(index);
+    },
+    [indicatorX]
+  );
+
+  const prevTabWidthRef = useRef(0);
+  // При изменении ширины контейнера (layout) — сразу выставляем позицию, чтобы индикатор не залипал
+  useEffect(() => {
     const tw = tabWidthRef.current;
     if (tw <= 0) return;
-    Animated.timing(indicatorX, {
-      toValue: index * tw,
-      duration: 200,
-      useNativeDriver: false,
-    }).start();
-    if (typeof onIndexChangeRef.current === 'function') onIndexChangeRef.current(index);
-  }, [indicatorX]);
+    if (tw !== prevTabWidthRef.current) {
+      prevTabWidthRef.current = tw;
+      const targetX = activeIndex * tw;
+      indicatorX.setValue(targetX);
+      currentX.current = targetX;
+    }
+  }, [tabWidth, activeIndex, indicatorX]);
 
+  // Анимация при смене вкладки
   useEffect(() => {
     const tw = tabWidthRef.current;
     if (tw <= 0) return;
@@ -154,6 +171,7 @@ function DraggableSegmentedControl({ activeIndex, onIndexChange, labels, styles 
           <Text
             style={[
               styles.segmentText,
+              activeIndex === index && styles.segmentTextActive,
               { color: activeIndex === index ? colors.primaryText : colors.secondaryText },
             ]}
           >
@@ -687,7 +705,10 @@ export default function DetailsScreen({ navigation, route }) {
     setAnalysis(null);
     setLoading(true);
     let cancelled = false;
-    getAnalysisByIdCached(analysisId)
+    const load = analysisId.startsWith('guest_')
+      ? getGuestAnalysisById(analysisId)
+      : getAnalysisByIdCached(analysisId);
+    load
       .then((a) => {
         if (!cancelled) setAnalysis(a);
       })
@@ -732,7 +753,11 @@ export default function DetailsScreen({ navigation, route }) {
       return;
     }
     try {
-      await deleteAnalysisWithRelated(id);
+      if (id.startsWith('guest_')) {
+        await deleteGuestAnalysis(id);
+      } else {
+        await deleteAnalysisWithRelated(id);
+      }
       setAnalysis(null);
       navigation.goBack();
     } catch (e) {
@@ -776,20 +801,22 @@ export default function DetailsScreen({ navigation, route }) {
   };
 
   const handleGuidanceToggle = async (itemId, isDone) => {
+    setAnalysis((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev };
+      next.guidance = (next.guidance || []).map((g) =>
+        g.id === itemId ? { ...g, is_done: isDone } : g
+      );
+      return next;
+    });
+    if (analysisId?.startsWith('guest_')) return;
     try {
       await updateGuidanceItemDone(itemId, isDone);
-      setAnalysis((prev) => {
-        if (!prev) return prev;
-        const next = { ...prev };
-        next.guidance = (next.guidance || []).map((g) =>
-          g.id === itemId ? { ...g, is_done: isDone } : g
-        );
-        return next;
-      });
     } catch (_) {}
   };
 
   const { user } = useAuth();
+  const { isGuest } = useGuest();
   const { setCurrentChatId, setChatContext, setRefreshChatTrigger } = useAILawyerChat();
 
   const buildFullDocumentContextText = useCallback((anal, issueItem = null) => {
@@ -829,7 +856,7 @@ export default function DetailsScreen({ navigation, route }) {
   }, []);
 
   const handleAskAI = async (issueItem) => {
-    if (!user?.id) return;
+    if (!user?.id && !isGuest) return;
     const docInitial = getDocumentChatInitial(analysis, issueItem ?? null, t);
     const fullContextText = buildFullDocumentContextText(analysis, issueItem ?? null);
     let context;
@@ -875,6 +902,20 @@ export default function DetailsScreen({ navigation, route }) {
       };
     }
     try {
+      const chatContextForDb = {
+        context_type: context.type,
+        context_title: context.title,
+        context_data: context.data ?? context,
+      };
+      if (isGuest) {
+        const created = await createGuestChat(context.title, chatContextForDb);
+        await addGuestChatMessage(created.id, 'assistant', docInitial.initial_message);
+        setCurrentChatId(created.id);
+        setChatContext(context);
+        setRefreshChatTrigger((p) => p + 1);
+        navigation.navigate('Chat');
+        return;
+      }
       const analysisIdForChat = analysis?.id ?? null;
       const existing = analysisIdForChat ? await getChatByAnalysisId(user.id, analysisIdForChat) : null;
       if (existing) {
@@ -884,11 +925,6 @@ export default function DetailsScreen({ navigation, route }) {
         navigation.navigate('Chat');
         return;
       }
-      const chatContextForDb = {
-        context_type: context.type,
-        context_title: context.title,
-        context_data: context.data ?? context,
-      };
       const created = await createChat(user.id, context.title, chatContextForDb, analysisIdForChat);
       await addChatMessage(created.id, 'assistant', docInitial.initial_message);
       setCurrentChatId(created.id);
@@ -1220,7 +1256,7 @@ function createStyles(colors) {
     color: colors.secondaryText,
     lineHeight: 20,
   },
-  /* Segmented control (iOS-style: height 42, radius 12/9, draggable indicator) */
+  /* Segmented control (iOS UISegmentedControl: track + white pill, subtle shadow) */
   segmentContainer: {
     flexDirection: 'row',
     height: SEGMENT_HEIGHT,
@@ -1230,6 +1266,7 @@ function createStyles(colors) {
     marginBottom: 0,
     marginHorizontal: spacing.md,
     backgroundColor: colors.tertiary,
+    overflow: 'hidden',
   },
   segmentIndicator: {
     position: 'absolute',
@@ -1240,9 +1277,9 @@ function createStyles(colors) {
     borderRadius: INDICATOR_RADIUS,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOpacity: 0.1,
+    shadowRadius: 2.5,
+    elevation: 1.5,
   },
   segmentButton: {
     flex: 1,
@@ -1252,9 +1289,12 @@ function createStyles(colors) {
   },
   segmentText: {
     fontFamily,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
-    lineHeight: 22,
+    lineHeight: 20,
+  },
+  segmentTextActive: {
+    fontWeight: '600',
   },
   /* Red Flags filter chips */
   filtersScrollWrap: {

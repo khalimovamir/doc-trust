@@ -23,10 +23,20 @@ import {
 } from 'react-native';
 import { Paperclip, SendHorizontal, X, FileText, Scale, Shield } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
+import { useNavigation } from '@react-navigation/native';
 import { useTheme, fontFamily, spacing } from '../theme';
 import { useAuth } from '../context/AuthContext';
+import { useGuest } from '../context/GuestContext';
 import { useProfile } from '../context/ProfileContext';
+import { useSubscription } from '../context/SubscriptionContext';
 import { useAILawyerChat } from '../context/AILawyerChatContext';
+import {
+  getGuestChat,
+  getGuestChatMessages,
+  getGuestMostRecentChat,
+  createGuestChat,
+  addGuestChatMessage,
+} from '../lib/guestChatStorage';
 import { chat as chatApi } from '../lib/ai';
 import { getAppLanguageCode } from '../i18n';
 import * as ImagePicker from 'expo-image-picker';
@@ -298,11 +308,14 @@ function formatMsgTime(dateStr) {
 
 export default function ChatView({ chatPrompt, chatContext }) {
   const { t } = useTranslation();
+  const navigation = useNavigation();
   const { colors, isDarkMode } = useTheme();
   const styles = useMemo(() => StyleSheet.create(createStyles(colors, isDarkMode)), [colors, isDarkMode]);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const { user } = useAuth();
+  const { isGuest } = useGuest();
   const { profile } = useProfile();
+  const { openSubscriptionIfLimitReached, decrementFeatureUsage } = useSubscription();
   const { currentChatId, setCurrentChatId, wasCleared, setChatContext, setChatPrompt, refreshChatTrigger } = useAILawyerChat();
   const [loadedChatContext, setLoadedChatContext] = useState(null);
   /** Document context text from loaded chat (context_data) — sent to API as relatedContext, not shown in UI */
@@ -411,47 +424,20 @@ export default function ChatView({ chatPrompt, chatContext }) {
   };
 
   useEffect(() => {
-    if (!user?.id) {
-      setLoadingChat(false);
-      return;
-    }
+    const isGuestUser = !user?.id || isGuest;
     let cancelled = false;
     const load = async () => {
       const cid = currentChatId;
-      if (cid) {
-        const [chat, msgs] = await Promise.all([getChat(cid), getChatMessages(cid)]);
-        if (!cancelled) {
-          setLoadedChatContext(
-            chat?.context_title
-              ? { title: chat.context_title, ref: chat.context_data?.ref || chat.context_data?.issue?.id }
-              : null
-          );
-          const ctxData = chat?.context_data;
-          const docText = ctxData?.fullDocumentContextText ?? ctxData?.contextText ?? (ctxData?.summary ? `${ctxData.documentType || 'Document'}\n\n${ctxData.summary}` : null);
-          setLoadedDocumentContextText(docText || null);
-          setLoadedInitialSuggestions(Array.isArray(ctxData?.initial_suggestions) && ctxData.initial_suggestions.length >= 3 ? ctxData.initial_suggestions : null);
-          setMessages(
-            msgs.map((m) => ({
-              id: m.id,
-              role: m.role,
-              text: m.content,
-              time: formatMsgTime(m.created_at),
-              imageUrl: m.image_url || undefined,
-            }))
-          );
-        }
-      } else if (!wasCleared) {
-        const recent = await getMostRecentChat(user.id);
-        if (!cancelled && recent) {
-          setCurrentChatId(recent.id);
-          const msgs = await getChatMessages(recent.id);
+      if (isGuestUser) {
+        if (cid) {
+          const [chat, msgs] = await Promise.all([getGuestChat(cid), getGuestChatMessages(cid)]);
           if (!cancelled) {
             setLoadedChatContext(
-              recent?.context_title
-                ? { title: recent.context_title, ref: recent.context_data?.ref || recent.context_data?.issue?.id }
+              chat?.context_title
+                ? { title: chat.context_title, ref: chat?.context_data?.ref || chat?.context_data?.issue?.id }
                 : null
             );
-            const ctxData = recent?.context_data;
+            const ctxData = chat?.context_data;
             const docText = ctxData?.fullDocumentContextText ?? ctxData?.contextText ?? (ctxData?.summary ? `${ctxData.documentType || 'Document'}\n\n${ctxData.summary}` : null);
             setLoadedDocumentContextText(docText || null);
             setLoadedInitialSuggestions(Array.isArray(ctxData?.initial_suggestions) && ctxData.initial_suggestions.length >= 3 ? ctxData.initial_suggestions : null);
@@ -465,26 +451,111 @@ export default function ChatView({ chatPrompt, chatContext }) {
               }))
             );
           }
+        } else if (!wasCleared) {
+          const recent = await getGuestMostRecentChat();
+          if (!cancelled && recent) {
+            setCurrentChatId(recent.id);
+            const msgs = await getGuestChatMessages(recent.id);
+            if (!cancelled) {
+              setLoadedChatContext(
+                recent?.context_title
+                  ? { title: recent.context_title, ref: recent?.context_data?.ref || recent?.context_data?.issue?.id }
+                  : null
+              );
+              const ctxData = recent?.context_data;
+              const docText = ctxData?.fullDocumentContextText ?? ctxData?.contextText ?? (ctxData?.summary ? `${ctxData.documentType || 'Document'}\n\n${ctxData.summary}` : null);
+              setLoadedDocumentContextText(docText || null);
+              setLoadedInitialSuggestions(Array.isArray(ctxData?.initial_suggestions) && ctxData.initial_suggestions.length >= 3 ? ctxData.initial_suggestions : null);
+              setMessages(
+                msgs.map((m) => ({
+                  id: m.id,
+                  role: m.role,
+                  text: m.content,
+                  time: formatMsgTime(m.created_at),
+                  imageUrl: m.image_url || undefined,
+                }))
+              );
+            }
+          } else {
+            setLoadedChatContext(null);
+            setLoadedDocumentContextText(null);
+            setLoadedInitialSuggestions(null);
+            setMessages([]);
+            if (chatPrompt?.trim() && !cancelled) setInputText(chatPrompt.trim());
+          }
         } else {
           setLoadedChatContext(null);
           setLoadedDocumentContextText(null);
           setLoadedInitialSuggestions(null);
           setMessages([]);
-          if (chatPrompt?.trim() && !cancelled) {
-            setInputText(chatPrompt.trim());
-          }
         }
       } else {
-        setLoadedChatContext(null);
-        setLoadedDocumentContextText(null);
-        setLoadedInitialSuggestions(null);
-        setMessages([]);
+        if (cid) {
+          const [chat, msgs] = await Promise.all([getChat(cid), getChatMessages(cid)]);
+          if (!cancelled) {
+            setLoadedChatContext(
+              chat?.context_title
+                ? { title: chat.context_title, ref: chat.context_data?.ref || chat.context_data?.issue?.id }
+                : null
+            );
+            const ctxData = chat?.context_data;
+            const docText = ctxData?.fullDocumentContextText ?? ctxData?.contextText ?? (ctxData?.summary ? `${ctxData.documentType || 'Document'}\n\n${ctxData.summary}` : null);
+            setLoadedDocumentContextText(docText || null);
+            setLoadedInitialSuggestions(Array.isArray(ctxData?.initial_suggestions) && ctxData.initial_suggestions.length >= 3 ? ctxData.initial_suggestions : null);
+            setMessages(
+              msgs.map((m) => ({
+                id: m.id,
+                role: m.role,
+                text: m.content,
+                time: formatMsgTime(m.created_at),
+                imageUrl: m.image_url || undefined,
+              }))
+            );
+          }
+        } else if (!wasCleared) {
+          const recent = await getMostRecentChat(user.id);
+          if (!cancelled && recent) {
+            setCurrentChatId(recent.id);
+            const msgs = await getChatMessages(recent.id);
+            if (!cancelled) {
+              setLoadedChatContext(
+                recent?.context_title
+                  ? { title: recent.context_title, ref: recent.context_data?.ref || recent.context_data?.issue?.id }
+                  : null
+              );
+              const ctxData = recent?.context_data;
+              const docText = ctxData?.fullDocumentContextText ?? ctxData?.contextText ?? (ctxData?.summary ? `${ctxData.documentType || 'Document'}\n\n${ctxData.summary}` : null);
+              setLoadedDocumentContextText(docText || null);
+              setLoadedInitialSuggestions(Array.isArray(ctxData?.initial_suggestions) && ctxData.initial_suggestions.length >= 3 ? ctxData.initial_suggestions : null);
+              setMessages(
+                msgs.map((m) => ({
+                  id: m.id,
+                  role: m.role,
+                  text: m.content,
+                  time: formatMsgTime(m.created_at),
+                  imageUrl: m.image_url || undefined,
+                }))
+              );
+            }
+          } else {
+            setLoadedChatContext(null);
+            setLoadedDocumentContextText(null);
+            setLoadedInitialSuggestions(null);
+            setMessages([]);
+            if (chatPrompt?.trim() && !cancelled) setInputText(chatPrompt.trim());
+          }
+        } else {
+          setLoadedChatContext(null);
+          setLoadedDocumentContextText(null);
+          setLoadedInitialSuggestions(null);
+          setMessages([]);
+        }
       }
       if (!cancelled) setLoadingChat(false);
     };
     load();
     return () => { cancelled = true; };
-  }, [user?.id, currentChatId, wasCleared, chatPrompt]);
+  }, [user?.id, isGuest, currentChatId, wasCleared, chatPrompt]);
 
   useEffect(() => {
     if (chatPrompt?.trim()) {
@@ -494,10 +565,13 @@ export default function ChatView({ chatPrompt, chatContext }) {
   }, [chatPrompt]);
 
   useEffect(() => {
-    if (!currentChatId || !user?.id || refreshChatTrigger === 0) return;
+    if (!currentChatId || refreshChatTrigger === 0) return;
+    const isGuestUser = !user?.id || isGuest;
     let cancelled = false;
     const refetch = async () => {
-      const msgs = await getChatMessages(currentChatId);
+      const msgs = isGuestUser
+        ? await getGuestChatMessages(currentChatId)
+        : await getChatMessages(currentChatId);
       if (!cancelled) {
         setMessages(
           msgs.map((m) => ({
@@ -512,7 +586,7 @@ export default function ChatView({ chatPrompt, chatContext }) {
     };
     refetch();
     return () => { cancelled = true; };
-  }, [refreshChatTrigger, currentChatId, user?.id]);
+  }, [refreshChatTrigger, currentChatId, user?.id, isGuest]);
 
   const sendWithOptions = (text, forceNewChat = false) => {
     sendMessage(text, forceNewChat);
@@ -549,7 +623,11 @@ export default function ChatView({ chatPrompt, chatContext }) {
 
   const sendMessage = async (text, forceNewChat = false) => {
     const trimmed = (text || inputText || '').trim();
-    if (!trimmed || loading || !user?.id) return;
+    if (!trimmed || loading) return;
+    const isGuestUser = !user?.id || isGuest;
+    if (!user?.id && !isGuest) return;
+    const nav = navigation.getParent?.()?.getParent?.() ?? navigation.getParent?.() ?? navigation;
+    if (!openSubscriptionIfLimitReached('ai_lawyer', nav)) return;
     setInputText('');
     const ctx = forceNewChat ? chatContext : activeContext;
     const contextTextToSend = pendingContextText || loadedDocumentContextText || null;
@@ -578,28 +656,56 @@ export default function ChatView({ chatPrompt, chatContext }) {
               }
             : null;
         const initialTitle = chatContextForDb?.context_title || t('aiLawyer.addNewChat');
-        const created = await createChat(user.id, initialTitle, chatContextForDb);
-        cid = created.id;
-        setCurrentChatId(cid);
-        if (ctx) setLoadedChatContext({ title: ctx.title, ref: ctx.ref });
-        const greetingAdded = await addChatMessage(cid, 'assistant', ASSISTANT_GREETING);
-        setMessages((prev) => [
-          { id: greetingAdded.id, role: 'assistant', text: ASSISTANT_GREETING, time: formatTime() },
-          ...prev,
-        ]);
+        if (isGuestUser) {
+          const created = await createGuestChat(initialTitle, chatContextForDb);
+          cid = created.id;
+          setCurrentChatId(cid);
+          if (ctx) setLoadedChatContext({ title: ctx.title, ref: ctx.ref });
+          await addGuestChatMessage(cid, 'assistant', ASSISTANT_GREETING);
+          setMessages((prev) => [
+            { id: 'guest_greeting', role: 'assistant', text: ASSISTANT_GREETING, time: formatTime() },
+            ...prev,
+          ]);
+        } else {
+          const created = await createChat(user.id, initialTitle, chatContextForDb);
+          cid = created.id;
+          setCurrentChatId(cid);
+          if (ctx) setLoadedChatContext({ title: ctx.title, ref: ctx.ref });
+          const greetingAdded = await addChatMessage(cid, 'assistant', ASSISTANT_GREETING);
+          setMessages((prev) => [
+            { id: greetingAdded.id, role: 'assistant', text: ASSISTANT_GREETING, time: formatTime() },
+            ...prev,
+          ]);
+        }
       }
       let imageUrl = null;
       if (imageToSend) {
-        imageUrl = await uploadChatImage(user.id, cid, imageToSend.base64);
-        setMessages((prev) =>
-          prev.map((m, i) =>
-            m.role === 'user' && m.time === userMsg.time && prev.length - 1 === i
-              ? { ...m, imageUrl }
-              : m
-          )
-        );
+        if (isGuestUser) {
+          imageUrl = imageToSend.base64 ? `data:image/jpeg;base64,${imageToSend.base64}` : imageToSend.uri;
+          setMessages((prev) =>
+            prev.map((m, i) =>
+              m.role === 'user' && m.time === userMsg.time && prev.length - 1 === i
+                ? { ...m, imageUrl }
+                : m
+            )
+          );
+        } else {
+          imageUrl = await uploadChatImage(user.id, cid, imageToSend.base64);
+          setMessages((prev) =>
+            prev.map((m, i) =>
+              m.role === 'user' && m.time === userMsg.time && prev.length - 1 === i
+                ? { ...m, imageUrl }
+                : m
+            )
+          );
+        }
       }
-      await addChatMessage(cid, 'user', trimmed, contextTextToSend, imageUrl);
+      if (isGuestUser) {
+        await addGuestChatMessage(cid, 'user', trimmed, imageUrl);
+      } else {
+        await addChatMessage(cid, 'user', trimmed, contextTextToSend, imageUrl);
+      }
+      decrementFeatureUsage('ai_lawyer').catch(() => {});
 
       let historyForGemini = historyForApi.map((m) => ({ role: m.role, text: m.text }));
       if (forceNewChat && ctx?.data) {
@@ -626,12 +732,19 @@ export default function ChatView({ chatPrompt, chatContext }) {
       if (contextTextToSend) chatOptions.relatedContext = contextTextToSend;
       if (imageToSend?.base64) chatOptions.imageBase64 = imageToSend.base64;
       const reply = await chatApi(historyForGemini, chatOptions);
-      const replyAdded = await addChatMessage(cid, 'assistant', reply);
-
-      setMessages((prev) => [
-        ...prev,
-        { id: replyAdded.id, role: 'assistant', text: reply, time: formatTime() },
-      ]);
+      if (isGuestUser) {
+        const replyAdded = await addGuestChatMessage(cid, 'assistant', reply);
+        setMessages((prev) => [
+          ...prev,
+          { id: replyAdded.id, role: 'assistant', text: reply, time: formatTime() },
+        ]);
+      } else {
+        const replyAdded = await addChatMessage(cid, 'assistant', reply);
+        setMessages((prev) => [
+          ...prev,
+          { id: replyAdded.id, role: 'assistant', text: reply, time: formatTime() },
+        ]);
+      }
     } catch (e) {
       setError(e?.message || 'Failed to get reply');
       if (imageToSend) {

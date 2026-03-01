@@ -19,6 +19,7 @@ import {
 import * as Clipboard from 'expo-clipboard';
 import { ClipboardList } from 'lucide-react-native';
 import { fontFamily, spacing, useTheme } from '../theme';
+import { useSubscription } from '../context/SubscriptionContext';
 import IconButton from '../components/IconButton';
 
 function createStyles(colors) {
@@ -50,6 +51,7 @@ function createStyles(colors) {
 export default function PasteTextScreen({ navigation }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
+  const { openSubscriptionIfLimitReached } = useSubscription();
   const styles = useMemo(() => StyleSheet.create(createStyles(colors)), [colors]);
   const [documentText, setDocumentText] = useState('');
   const [fieldError, setFieldError] = useState('');
@@ -71,6 +73,7 @@ export default function PasteTextScreen({ navigation }) {
       setFieldError(t('pasteText.errorEmpty'));
       return;
     }
+    if (!openSubscriptionIfLimitReached('document_check', navigation)) return;
     navigation.navigate('Analyzing', { documentText: trimmed, source: 'paste' });
   };
 

@@ -87,23 +87,16 @@ export default function ComparingResultScreen({ navigation, route }) {
   const [activeFilter, setActiveFilter] = useState('all');
   const [summaryShowMore, setSummaryShowMore] = useState(false);
 
-  const menuActions = useMemo(
-    () => [
-      {
-        id: 'share',
-        title: t('details.share'),
-        image: Platform.select({ ios: 'square.and.arrow.up', android: 'ic_menu_share' }),
-        imageColor: colors.primaryText,
-      },
-      {
-        id: 'export',
-        title: t('details.exportPdf'),
-        image: Platform.select({ ios: 'square.and.arrow.down', android: 'ic_menu_save' }),
-        imageColor: colors.primaryText,
-      },
-    ],
-    [t, colors.primaryText]
-  );
+  const menuActions = useMemo(() => {
+    const base = [
+      { id: 'share', title: t('details.share'), image: 'square.and.arrow.up', imageColor: colors.primaryText },
+      { id: 'export', title: t('details.exportPdf'), image: 'square.and.arrow.down', imageColor: colors.primaryText },
+    ];
+    if (Platform.OS === 'android') {
+      return base.map(({ id, title }) => ({ id, title }));
+    }
+    return base;
+  }, [t, colors.primaryText]);
 
   const menuActionRef = useRef(() => {});
   menuActionRef.current = (eventId) => {

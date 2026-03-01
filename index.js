@@ -1,3 +1,11 @@
+// Register topSvgLayout so react-native-svg layout events are accepted on Android (avoids "Unsupported top level event type topSvgLayout").
+try {
+  const { customDirectEventTypes } = require('react-native/Libraries/Renderer/shims/ReactNativeViewConfigRegistry');
+  if (customDirectEventTypes && !customDirectEventTypes.topSvgLayout) {
+    customDirectEventTypes.topSvgLayout = { registrationName: 'onSvgLayout' };
+  }
+} catch (_) {}
+
 import React from 'react';
 import { LogBox } from 'react-native';
 import { registerRootComponent } from 'expo';
