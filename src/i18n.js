@@ -27,7 +27,7 @@ const FALLBACK_LNG = 'en';
 /** Supported app languages (device "Language & region" → one of these). */
 export const SUPPORTED_LANGUAGES = ['en', 'ru', 'de', 'ko', 'es', 'pt', 'fr', 'it', 'nl', 'ar'];
 
-const LAST_APP_LANGUAGE_KEY = 'i18n.lastAppLanguage';
+export const LAST_APP_LANGUAGE_KEY = 'i18n.lastAppLanguage';
 
 const BUNDLED = {
   en: { translation: en },

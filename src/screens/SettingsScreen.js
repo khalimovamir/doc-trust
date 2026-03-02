@@ -33,6 +33,8 @@ import { fontFamily, spacing, borderRadius, useTheme } from '../theme';
 import { useAuth } from '../context/AuthContext';
 import { useGuest } from '../context/GuestContext';
 import { useProfile } from '../context/ProfileContext';
+import { useJurisdiction } from '../context/JurisdictionContext';
+import { useSentFeatureRequests } from '../context/SentFeatureRequestsContext';
 import { useSubscription } from '../context/SubscriptionContext';
 import { openLanguageSettings } from '../openLanguageSettings';
 import { requestReviewFromSettings } from '../lib/requestReview';
@@ -68,6 +70,8 @@ export default function SettingsScreen({ navigation }) {
   const { user, signOut } = useAuth();
   const { isGuest } = useGuest();
   const { profile } = useProfile();
+  const { jurisdictionCode } = useJurisdiction();
+  const { hasSentIdeas } = useSentFeatureRequests();
   const { isPro, features, persistUsageForPostLogout, openSubscriptionBottomSheet } = useSubscription();
   const isLoggedIn = !!user?.id && !isGuest;
 
@@ -189,7 +193,7 @@ export default function SettingsScreen({ navigation }) {
           <Text style={styles.sectionLabel}>{t('settings.jurisdiction')}</Text>
           <SettingsRow
             icon={<Landmark size={24} color={colors.primary} strokeWidth={2} />}
-            title={profile?.jurisdiction_code && JURISDICTION_CODES.includes(profile.jurisdiction_code) ? t('jurisdictions.country' + profile.jurisdiction_code) : t('jurisdictions.countryUS')}
+            title={jurisdictionCode && JURISDICTION_CODES.includes(jurisdictionCode) ? t('jurisdictions.country' + jurisdictionCode) : t('jurisdictions.countryUS')}
             subtitle={t('settings.jurisdictionSubtitle')}
             rowStyles={styles}
             colors={colors}
@@ -266,7 +270,17 @@ export default function SettingsScreen({ navigation }) {
             subtitle={t('settings.featureRequestSubtitle')}
             rowStyles={styles}
             colors={colors}
-            onPress={() => navigation.navigate('FeatureRequest')}
+            onPress={() => {
+              if (isGuest && !hasSentIdeas) {
+                Alert.alert(
+                  t('featureRequestScreen.guestSignInTitle'),
+                  t('featureRequestScreen.guestSignInMessage'),
+                  [{ text: t('common.close') }]
+                );
+                return;
+              }
+              navigation.navigate('FeatureRequest');
+            }}
           />
           <SettingsRow
             icon={<Star size={22} color={colors.primary} strokeWidth={2} />}

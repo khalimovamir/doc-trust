@@ -27,7 +27,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useTheme, fontFamily, spacing } from '../theme';
 import { useAuth } from '../context/AuthContext';
 import { useGuest } from '../context/GuestContext';
-import { useProfile } from '../context/ProfileContext';
+import { useJurisdiction } from '../context/JurisdictionContext';
 import { useSubscription } from '../context/SubscriptionContext';
 import { useAILawyerChat } from '../context/AILawyerChatContext';
 import {
@@ -314,7 +314,7 @@ export default function ChatView({ chatPrompt, chatContext }) {
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const { user } = useAuth();
   const { isGuest } = useGuest();
-  const { profile } = useProfile();
+  const { jurisdictionCode } = useJurisdiction();
   const { openSubscriptionIfLimitReached, decrementFeatureUsage } = useSubscription();
   const { currentChatId, setCurrentChatId, wasCleared, setChatContext, setChatPrompt, refreshChatTrigger } = useAILawyerChat();
   const [loadedChatContext, setLoadedChatContext] = useState(null);
@@ -727,7 +727,7 @@ export default function ChatView({ chatPrompt, chatContext }) {
       }
       const chatOptions = {
         language: getAppLanguageCode(),
-        jurisdiction: profile?.jurisdiction_code || 'US',
+        jurisdiction: jurisdictionCode || 'US',
       };
       if (contextTextToSend) chatOptions.relatedContext = contextTextToSend;
       if (imageToSend?.base64) chatOptions.imageBase64 = imageToSend.base64;
@@ -771,7 +771,7 @@ export default function ChatView({ chatPrompt, chatContext }) {
       : DEFAULT_SUGGESTIONS;
 
   return (
-    <View style={[styles.keyboardAvoid, { paddingBottom: keyboardHeight }]}>
+    <View style={[styles.keyboardAvoid, { paddingBottom: keyboardHeight + 16}]}>
       <View style={styles.container}>
         <ScrollView
           ref={scrollRef}

@@ -16,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { fontFamily, spacing, useTheme } from '../theme';
 import { useAnalysis } from '../context/AnalysisContext';
-import { useProfile } from '../context/ProfileContext';
+import { useJurisdiction } from '../context/JurisdictionContext';
 import { analyzeDocument } from '../lib/ai';
 import { getTextFromImageUri } from '../lib/uploadDocument';
 import { getAppLanguageCode } from '../i18n';
@@ -34,7 +34,7 @@ function createStyles(colors) {
 export default function AnalyzingScreen({ navigation, route }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
-  const { profile } = useProfile();
+  const { jurisdictionCode } = useJurisdiction();
   const { setAnalysis } = useAnalysis();
   const styles = useMemo(() => StyleSheet.create(createStyles(colors)), [colors]);
   const documentTextParam = route.params?.documentText || '';
@@ -86,7 +86,7 @@ export default function AnalyzingScreen({ navigation, route }) {
       }
 
       try {
-        const jurisdiction = profile?.jurisdiction_code || 'US';
+        const jurisdiction = jurisdictionCode || 'US';
         const language = getAppLanguageCode();
         const result = await analyzeDocument(documentText, { jurisdiction, language });
         if (cancelled) return;
@@ -111,7 +111,7 @@ export default function AnalyzingScreen({ navigation, route }) {
     };
     run();
     return () => { cancelled = true; };
-  }, [documentTextParam, scanImages, source, profile?.jurisdiction_code, navigation, setAnalysis, t]);
+  }, [documentTextParam, scanImages, source, jurisdictionCode, navigation, setAnalysis, t]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

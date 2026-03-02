@@ -1,9 +1,10 @@
 /**
  * AI Lawyer - Jurisdiction Screen
- * Loads/saves jurisdiction_code from Supabase profile
+ * Reads/writes jurisdiction from App State (JurisdictionContext).
+ * For authenticated users also saves to Supabase profile.
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   View,
@@ -13,14 +14,13 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
-  ActivityIndicator,
   Platform,
 } from 'react-native';
 import { Search, Check } from 'lucide-react-native';
 import { fontFamily, spacing, borderRadius, useTheme } from '../theme';
-import IconButton from '../components/IconButton';
 import { useAuth } from '../context/AuthContext';
 import { useProfile } from '../context/ProfileContext';
+import { useJurisdiction } from '../context/JurisdictionContext';
 import { updateProfile } from '../lib/profile';
 import { JURISDICTION_IDS } from '../lib/jurisdictions';
 
@@ -44,21 +44,17 @@ export default function JurisdictionScreen({ navigation }) {
   const { colors } = useTheme();
   const styles = useMemo(() => StyleSheet.create(createStyles(colors)), [colors]);
   const { user } = useAuth();
-  const { profile, refreshProfile } = useProfile();
+  const { refreshProfile } = useProfile();
+  const { jurisdictionCode, setJurisdictionCode } = useJurisdiction();
   const [search, setSearch] = useState('');
-  const [selectedId, setSelectedId] = useState(profile?.jurisdiction_code || 'US');
   const [saving, setSaving] = useState(false);
+
+  const selectedId = jurisdictionCode || 'US';
 
   const jurisdictions = useMemo(
     () => JURISDICTION_IDS.map((j) => ({ ...j, name: t('jurisdictions.country' + j.id) })),
     [t]
   );
-
-  useEffect(() => {
-    if (profile?.jurisdiction_code) {
-      setSelectedId(profile.jurisdiction_code);
-    }
-  }, [profile?.jurisdiction_code]);
 
   const filtered = jurisdictions.filter(
     (j) => !search || j.name.toLowerCase().includes(search.toLowerCase())
@@ -67,12 +63,14 @@ export default function JurisdictionScreen({ navigation }) {
   const handleBack = () => navigation.goBack();
 
   const handleSelect = async (id) => {
-    if (!user?.id || selectedId === id) return;
-    setSelectedId(id);
+    if (selectedId === id) return;
+    setJurisdictionCode(id);
     setSaving(true);
     try {
-      await updateProfile(user.id, { jurisdiction_code: id });
-      await refreshProfile();
+      if (user?.id) {
+        await updateProfile(user.id, { jurisdiction_code: id });
+        await refreshProfile();
+      }
       navigation.goBack();
     } catch (e) {
       Alert.alert('Error', e?.message || 'Could not save jurisdiction.');

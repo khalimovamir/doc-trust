@@ -20,6 +20,7 @@ import {
 import { Search, Check } from 'lucide-react-native';
 import { fontFamily, spacing, useTheme } from '../theme';
 import { useOnboardingJurisdiction } from '../context/OnboardingJurisdictionContext';
+import { useJurisdiction } from '../context/JurisdictionContext';
 import { JURISDICTION_IDS } from '../lib/jurisdictions';
 import PrimaryButton from '../components/PrimaryButton';
 import { NativeHeaderButtonInfo } from '../components/NativeHeaderButton';
@@ -46,6 +47,7 @@ export default function OnboardingJurisdictionScreen({ navigation }) {
   const { colors } = useTheme();
   const styles = useMemo(() => StyleSheet.create(createStyles(colors)), [colors]);
   const { setPendingJurisdiction } = useOnboardingJurisdiction();
+  const { setJurisdictionCode } = useJurisdiction();
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState(null);
 
@@ -67,6 +69,7 @@ export default function OnboardingJurisdictionScreen({ navigation }) {
       );
       return;
     }
+    setJurisdictionCode(selectedId);
     setPendingJurisdiction(selectedId);
     navigation.replace('GetStarted');
   };

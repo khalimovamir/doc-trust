@@ -37,7 +37,7 @@ import { useAuth } from '../context/AuthContext';
 import { useGuest } from '../context/GuestContext';
 import { useAILawyerChat } from '../context/AILawyerChatContext';
 import { useAnalysis } from '../context/AnalysisContext';
-import { useProfile } from '../context/ProfileContext';
+import { useJurisdiction } from '../context/JurisdictionContext';
 import { useTranslation } from 'react-i18next';
 import { getAnalysisByIdCached, updateGuidanceItemDone, deleteAnalysisWithRelated } from '../lib/documents';
 import { getGuestAnalysisById, deleteGuestAnalysis } from '../lib/guestAnalysisStorage';
@@ -687,7 +687,7 @@ export default function DetailsScreen({ navigation, route }) {
   const { t } = useTranslation();
   const { colors, isDarkMode } = useTheme();
   const { analysis, setAnalysis } = useAnalysis();
-  const { profile } = useProfile();
+  const { jurisdictionCode } = useJurisdiction();
   const analysisId = route.params?.analysisId;
   const [activeTab, setActiveTab] = useState(0);
   const tabLabels = TABS_KEYS.map((k) => t('analysis.' + k));
@@ -1078,7 +1078,7 @@ export default function DetailsScreen({ navigation, route }) {
         <View style={styles.tabContent}>
           {activeTab === 0 && (
             <View style={styles.scrollContent}>
-              <SummaryContent analysis={analysis} jurisdictionCode={profile?.jurisdiction_code || 'US'} onJurisdictionEdit={() => navigation.navigate('Jurisdiction')} hideJurisdiction styles={styles} />
+              <SummaryContent analysis={analysis} jurisdictionCode={jurisdictionCode || 'US'} onJurisdictionEdit={() => navigation.navigate('Jurisdiction')} hideJurisdiction styles={styles} />
             </View>
           )}
           {activeTab === 1 && (

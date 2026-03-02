@@ -17,7 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { fontFamily, spacing, useTheme } from '../theme';
 import { useAuth } from '../context/AuthContext';
-import { useProfile } from '../context/ProfileContext';
+import { useJurisdiction } from '../context/JurisdictionContext';
 import { useSubscription } from '../context/SubscriptionContext';
 import { compareDocuments } from '../lib/ai';
 import { getAppLanguageCode } from '../i18n';
@@ -36,7 +36,7 @@ export default function ComparingScreen({ navigation, route }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const { user } = useAuth();
-  const { profile } = useProfile();
+  const { jurisdictionCode } = useJurisdiction();
   const { decrementFeatureUsage } = useSubscription();
   const styles = useMemo(() => StyleSheet.create(createStyles(colors)), [colors]);
   const document1Text = route.params?.document1Text || '';
@@ -53,7 +53,7 @@ export default function ComparingScreen({ navigation, route }) {
     let cancelled = false;
     const run = async () => {
       try {
-        const jurisdiction = profile?.jurisdiction_code || 'US';
+        const jurisdiction = jurisdictionCode || 'US';
         const language = getAppLanguageCode();
         const result = await compareDocuments(document1Text, document2Text, { jurisdiction, language });
         if (cancelled) return;
@@ -84,7 +84,7 @@ export default function ComparingScreen({ navigation, route }) {
     };
     run();
     return () => { cancelled = true; };
-  }, [document1Text, document2Text, document1Name, document2Name, profile?.jurisdiction_code, user?.id, navigation, t]);
+  }, [document1Text, document2Text, document1Name, document2Name, jurisdictionCode, user?.id, navigation, t]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

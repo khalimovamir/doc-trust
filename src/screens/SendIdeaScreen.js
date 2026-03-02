@@ -20,6 +20,7 @@ import {
 import { fontFamily, spacing, useTheme } from '../theme';
 import IconButton from '../components/IconButton';
 import { useAuth } from '../context/AuthContext';
+import { useSentFeatureRequests } from '../context/SentFeatureRequestsContext';
 import { createFeatureRequest, getMyFeatureRequestCount } from '../lib/featureRequests';
 
 function createStyles(colors) {
@@ -46,6 +47,7 @@ export default function SendIdeaScreen({ navigation }) {
   const { colors } = useTheme();
   const styles = useMemo(() => StyleSheet.create(createStyles(colors)), [colors]);
   const { user } = useAuth();
+  const { addSentId } = useSentFeatureRequests();
   const [title, setTitle] = useState('');
   const [idea, setIdea] = useState('');
   const [titleError, setTitleError] = useState('');
@@ -73,7 +75,8 @@ export default function SendIdeaScreen({ navigation }) {
     }
     setSending(true);
     try {
-      await createFeatureRequest({ title: tVal, description: d }, user.id);
+      const data = await createFeatureRequest({ title: tVal, description: d }, user.id);
+      if (data?.id) addSentId(data.id);
       Alert.alert(t('featureRequestScreen.thankYou'), t('featureRequestScreen.submitted'), [
         { text: t('featureRequestScreen.ok'), onPress: () => navigation.goBack() },
       ]);

@@ -21,7 +21,7 @@ import { fontFamily, spacing, useTheme } from '../theme';
 import { SkeletonDetails } from '../components/Skeleton';
 import { useAuth } from '../context/AuthContext';
 import { useGuest } from '../context/GuestContext';
-import { useProfile } from '../context/ProfileContext';
+import { useJurisdiction } from '../context/JurisdictionContext';
 import { useAnalysis } from '../context/AnalysisContext';
 import { useAILawyerChat } from '../context/AILawyerChatContext';
 import { analyzeDocument } from '../lib/ai';
@@ -54,7 +54,7 @@ export default function AnalysisResultScreen({ navigation, route }) {
   const { colors, isDarkMode } = useTheme();
   const { user } = useAuth();
   const { isGuest } = useGuest();
-  const { profile } = useProfile();
+  const { jurisdictionCode } = useJurisdiction();
   const { analysis, setAnalysis } = useAnalysis();
   const guestSavedIdRef = useRef(null);
   const { openChat } = useAILawyerChat();
@@ -90,7 +90,7 @@ export default function AnalysisResultScreen({ navigation, route }) {
           { id: 'export', title: t('details.exportPdf'), image: 'square.and.arrow.down', imageColor: colors.primaryText },
         ]);
   }, [t, colors.primaryText, isSaved]);
-  const lastJurisdictionRef = useRef(profile?.jurisdiction_code);
+  const lastJurisdictionRef = useRef(jurisdictionCode);
   const fromJurisdictionRef = useRef(false);
   const analysisRef = useRef(analysis);
   analysisRef.current = analysis;
@@ -266,16 +266,16 @@ export default function AnalysisResultScreen({ navigation, route }) {
 
   const onJurisdictionEdit = useCallback(() => {
     fromJurisdictionRef.current = true;
-    lastJurisdictionRef.current = profile?.jurisdiction_code;
+    lastJurisdictionRef.current = jurisdictionCode;
     navigation.navigate('Jurisdiction');
-  }, [profile?.jurisdiction_code, navigation]);
+  }, [jurisdictionCode, navigation]);
 
   useFocusEffect(
     useCallback(() => {
       if (isSaved) return;
       if (!fromJurisdictionRef.current || !documentText) return;
       fromJurisdictionRef.current = false;
-      const newCode = profile?.jurisdiction_code || 'US';
+      const newCode = jurisdictionCode || 'US';
       if (lastJurisdictionRef.current === newCode) return;
       lastJurisdictionRef.current = newCode;
       setReAnalyzing(true);
@@ -283,7 +283,7 @@ export default function AnalysisResultScreen({ navigation, route }) {
         .then((result) => setAnalysis({ ...result, text_content: documentText }))
         .catch(() => {})
         .finally(() => setReAnalyzing(false));
-    }, [documentText, profile?.jurisdiction_code, setAnalysis, isSaved])
+    }, [documentText, jurisdictionCode, setAnalysis, isSaved])
   );
 
   useLayoutEffect(() => {
@@ -414,7 +414,7 @@ export default function AnalysisResultScreen({ navigation, route }) {
             <View style={styles.scrollContent}>
               <SummaryContent
                 analysis={analysis}
-                jurisdictionCode={profile?.jurisdiction_code || 'US'}
+                jurisdictionCode={jurisdictionCode || 'US'}
                 onJurisdictionEdit={onJurisdictionEdit}
                 hideJurisdiction={isSaved}
                 styles={styles}

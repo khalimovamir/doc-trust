@@ -1,0 +1,13 @@
+diff --git a/node_modules/@expo/prebuild-config/build/plugins/icons/withAndroidIcons.js b/node_modules/@expo/prebuild-config/build/plugins/icons/withAndroidIcons.js
+index 0f0c22d..58660e5 100644
+--- a/node_modules/@expo/prebuild-config/build/plugins/icons/withAndroidIcons.js
++++ b/node_modules/@expo/prebuild-config/build/plugins/icons/withAndroidIcons.js
+@@ -356,7 +356,7 @@ async function generateIconAsync(projectRoot, {
+     src,
+     width: iconSizePx,
+     height: iconSizePx,
+-    resizeMode: 'cover',
++    resizeMode: 'contain',
+     backgroundColor,
+     borderRadius: borderRadiusRatio ? iconSizePx * borderRadiusRatio : undefined
+   })).source;

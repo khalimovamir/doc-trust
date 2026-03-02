@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { AppState, View, Text, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
+
+SplashScreen.preventAutoHideAsync();
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider, useTheme } from './src/theme';
 import { AuthProvider } from './src/context/AuthContext';
@@ -14,12 +17,15 @@ import { migrateGuestAnalysesToSupabase } from './src/lib/guestAnalysisStorage';
 import { createChat, addChatMessage } from './src/lib/chat';
 import { saveDocumentWithAnalysis } from './src/lib/documents';
 import { ProfileProvider, useProfile } from './src/context/ProfileContext';
+import { JurisdictionProvider } from './src/context/JurisdictionContext';
 import { useAuth } from './src/context/AuthContext';
 import { updateProfile } from './src/lib/profile';
 import { SubscriptionProvider } from './src/context/SubscriptionContext';
 import { AnalysisProvider } from './src/context/AnalysisContext';
 import AppNavigator from './src/navigation/AppNavigator';
-import { ensureI18n } from './src/i18n';
+import { ensureI18n, getAppLanguageCode } from './src/i18n';
+import { AppLanguageProvider } from './src/context/AppLanguageContext';
+import { SentFeatureRequestsProvider } from './src/context/SentFeatureRequestsContext';
 import ErrorBoundary from './src/components/ErrorBoundary';
 
 function getSupabaseUrl() {
@@ -114,6 +120,24 @@ function SyncGuestOnSignIn() {
   return null;
 }
 
+/** When guest signs in: write current app language to Supabase profile. */
+function PendingLanguageSync() {
+  const { user } = useAuth();
+  const { isGuest } = useGuest();
+  const syncedRef = React.useRef(false);
+  useEffect(() => {
+    if (!user?.id || !isGuest) {
+      syncedRef.current = false;
+      return;
+    }
+    if (syncedRef.current) return;
+    syncedRef.current = true;
+    const lang = getAppLanguageCode();
+    updateProfile(user.id, { preferred_language: lang }).catch(() => {});
+  }, [user?.id, isGuest]);
+  return null;
+}
+
 /** After sign-in, writes pending onboarding jurisdiction to Supabase profile and clears it. */
 function PendingJurisdictionSync({ children }) {
   const { user } = useAuth();
@@ -149,8 +173,11 @@ function StatusBarThemed() {
   );
 }
 
+const SPLASH_DURATION_MS = 2000;
+
 function App() {
   const [i18nReady, setI18nReady] = useState(false);
+  const [splashHidden, setSplashHidden] = useState(false);
 
   useEffect(() => {
     ensureI18n()
@@ -165,11 +192,20 @@ function App() {
     return () => sub?.remove?.();
   }, []);
 
+  useEffect(() => {
+    const t = setTimeout(async () => {
+      await SplashScreen.hideAsync();
+      setSplashHidden(true);
+    }, SPLASH_DURATION_MS);
+    return () => clearTimeout(t);
+  }, []);
+
   if (!hasSupabaseConfig) {
     return <ConfigMissingScreen />;
   }
 
   if (!i18nReady) return null;
+  if (!splashHidden) return null;
 
   return (
     <ErrorBoundary navigationRef={navigationRefHolder}>
@@ -179,9 +215,13 @@ function App() {
           <AuthProvider>
             <GuestProvider>
               <SyncGuestOnSignIn />
+              <PendingLanguageSync />
               <GuestAppStateProvider>
+                <SentFeatureRequestsProvider>
                 <OnboardingJurisdictionProvider>
                   <ProfileProvider>
+                    <JurisdictionProvider>
+                    <AppLanguageProvider>
                     <PendingJurisdictionSync>
                       <SubscriptionProvider>
                         <AnalysisProvider>
@@ -189,8 +229,11 @@ function App() {
                         </AnalysisProvider>
                       </SubscriptionProvider>
                     </PendingJurisdictionSync>
+                    </AppLanguageProvider>
+                    </JurisdictionProvider>
                   </ProfileProvider>
                 </OnboardingJurisdictionProvider>
+                </SentFeatureRequestsProvider>
               </GuestAppStateProvider>
             </GuestProvider>
           </AuthProvider>

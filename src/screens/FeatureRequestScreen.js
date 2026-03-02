@@ -151,16 +151,17 @@ export default function FeatureRequestScreen({ navigation }) {
   const canSendIdea = myRequestCount < 2;
 
   const load = useCallback(async () => {
-    if (!user?.id) return;
     setLoading(true);
     setError(null);
     try {
-      const [list, voted] = await Promise.all([
-        listFeatureRequests(),
-        getMyVotedIds(user.id),
-      ]);
+      const list = await listFeatureRequests();
       setRequests(Array.isArray(list) ? list : []);
-      setMyVotedIds(voted);
+      if (user?.id) {
+        const voted = await getMyVotedIds(user.id);
+        setMyVotedIds(voted);
+      } else {
+        setMyVotedIds(new Set());
+      }
     } catch (e) {
       setError(e?.message ?? 'Failed to load');
     } finally {
@@ -185,7 +186,15 @@ export default function FeatureRequestScreen({ navigation }) {
   }, [navigation, colors]);
 
   const handleUpvote = async (id) => {
-    if (!user?.id || votingId) return;
+    if (!user?.id) {
+      Alert.alert(
+        t('featureRequestScreen.guestSignInTitle'),
+        t('featureRequestScreen.signInToVoteMessage'),
+        [{ text: t('common.close') }]
+      );
+      return;
+    }
+    if (votingId) return;
     const item = requests.find((r) => r.id === id);
     if (item?.status !== 'approved') return;
     setVotingId(id);
@@ -202,7 +211,17 @@ export default function FeatureRequestScreen({ navigation }) {
     }
   };
 
-  const handleSendIdea = () => navigation.navigate('SendIdea');
+  const handleSendIdea = () => {
+    if (!user?.id) {
+      Alert.alert(
+        t('featureRequestScreen.guestSignInTitle'),
+        t('featureRequestScreen.signInToSendMessage'),
+        [{ text: t('common.close') }]
+      );
+      return;
+    }
+    navigation.navigate('SendIdea');
+  };
 
   const handleDeleteRequest = (id, title) => {
     Alert.alert(
