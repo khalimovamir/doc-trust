@@ -37,8 +37,8 @@ npx expo run:android
 
 Добавить ключи в окружение (например через `eas secret` или `.env`):
 
-- `REVENUECAT_IOS_API_KEY` — iOS API Key из RevenueCat.
-- `REVENUECAT_ANDROID_API_KEY` — Android API Key из RevenueCat.
+- `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` — iOS API Key из RevenueCat.
+- `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY` — Android API Key из RevenueCat.
 
 В коде инициализация по платформе:
 

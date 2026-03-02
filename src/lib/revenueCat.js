@@ -1,7 +1,7 @@
 /**
- * RevenueCat integration (optional).
- * Install: npx expo install react-native-purchases
- * Then set EXPO_PUBLIC_REVENUECAT_IOS_API_KEY and EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY.
+ * RevenueCat integration.
+ * Set EXPO_PUBLIC_REVENUECAT_IOS_API_KEY and EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY in .env.
+ * In RevenueCat dashboard the entitlement identifier must be "pro" (display name can be "DocTrust Pro").
  * See docs/REVENUECAT.md for full setup.
  */
 
@@ -10,11 +10,10 @@ import { Platform } from 'react-native';
 let Purchases = null;
 try {
   Purchases = require('react-native-purchases').default;
-} catch (_) {
-  // react-native-purchases not installed
-}
+} catch (_) {}
 
-const ENTITLEMENT_ID = 'pro';
+/** Must match RevenueCat entitlement Identifier (e.g. "pro" or "DocTrust Pro"). */
+const ENTITLEMENT_ID = 'DocTrust Pro';
 
 export function isRevenueCatAvailable() {
   return Purchases != null;
@@ -31,6 +30,12 @@ export async function configureRevenueCat(userId = null) {
       ? process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY
       : process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY;
   if (!apiKey) return;
+  if (typeof __DEV__ !== 'undefined' && __DEV__ && Purchases.setLogLevel) {
+    try {
+      const { LOG_LEVEL } = require('react-native-purchases');
+      Purchases.setLogLevel(LOG_LEVEL.VERBOSE);
+    } catch (_) {}
+  }
   await Purchases.configure({ apiKey });
   if (userId) await Purchases.logIn(userId);
 }
@@ -94,4 +99,16 @@ export async function getRevenueCatIsPro() {
 export async function getRevenueCatCustomerInfo() {
   if (!Purchases) return null;
   return await Purchases.getCustomerInfo();
+}
+
+/**
+ * Present RevenueCat Paywall — not available (react-native-purchases-ui removed to fix iOS build).
+ * Use your own SubscriptionBottomSheet with getRevenueCatOfferings() and purchaseRevenueCatPackage().
+ */
+export async function presentRevenueCatPaywall() {
+  return false;
+}
+
+export function isRevenueCatUIAvailable() {
+  return false;
 }

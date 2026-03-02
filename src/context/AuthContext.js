@@ -6,6 +6,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { configureRevenueCat, revenueCatLogIn, revenueCatLogOut } from '../lib/revenueCat';
 
 const AuthContext = createContext({
   session: null,
@@ -22,6 +23,10 @@ export function AuthProvider({ children }) {
   const [pendingPasswordReset, setPendingPasswordReset] = useState(false);
 
   useEffect(() => {
+    configureRevenueCat().catch(() => {});
+  }, []);
+
+  useEffect(() => {
     let subscription = { unsubscribe: () => {} };
     try {
       supabase.auth.getSession()
@@ -34,6 +39,7 @@ export function AuthProvider({ children }) {
               }
             } else {
               setSession(s);
+              revenueCatLogIn(s?.user?.id).catch(() => {});
             }
           } finally {
             setIsLoading(false);
@@ -54,9 +60,11 @@ export function AuthProvider({ children }) {
       const result = supabase.auth.onAuthStateChange?.((event, s) => {
         try {
           if (event === 'SIGNED_OUT' || !s?.user) {
+            revenueCatLogOut().catch(() => {});
             setSession(null);
           } else {
             setSession(s);
+            revenueCatLogIn(s?.user?.id).catch(() => {});
           }
         } finally {
           setIsLoading(false);
@@ -72,6 +80,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const signOut = async () => {
+    revenueCatLogOut().catch(() => {});
     await supabase.auth.signOut();
     setSession(null);
   };

@@ -26,6 +26,7 @@ import {
   persistOfferStatesForPostLogout,
   grantManualSubscription,
 } from '../lib/subscription';
+import { getRevenueCatIsPro } from '../lib/revenueCat';
 import { POST_LOGOUT_USAGE_KEY, GUEST_SUBSCRIPTION_KEY } from '../lib/guestStorage';
 
 const SubscriptionContext = createContext({
@@ -69,6 +70,7 @@ export function SubscriptionProvider({ children }) {
   const [limits, setLimits] = useState({});
   const [usage, setUsage] = useState({});
   const [offers, setOffers] = useState([]);
+  const [revenueCatIsPro, setRevenueCatIsPro] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [subscriptionSheetVisible, setSubscriptionSheetVisible] = useState(false);
   const [subscriptionSheetParams, setSubscriptionSheetParams] = useState({ offerId: null, offerProductId: null });
@@ -108,6 +110,7 @@ export function SubscriptionProvider({ children }) {
         });
         setLimits(limitsMap);
         setOffers(offs || []);
+        setRevenueCatIsPro(false);
       } catch (e) {
         console.warn('Subscription load (guest) failed:', e?.message);
       }
@@ -121,6 +124,7 @@ export function SubscriptionProvider({ children }) {
       setLimits({});
       setUsage({});
       setOffers([]);
+      setRevenueCatIsPro(false);
       setIsLoading(false);
       return;
     }
@@ -145,6 +149,12 @@ export function SubscriptionProvider({ children }) {
       setLimits(limitsMap);
       setUsage(usageData || {});
       setOffers(offs || []);
+      try {
+        const rcPro = await getRevenueCatIsPro();
+        setRevenueCatIsPro(rcPro);
+      } catch (_) {
+        setRevenueCatIsPro(false);
+      }
     } catch (e) {
       console.warn('Subscription load failed:', e?.message);
       setSubscription(null);
@@ -153,6 +163,7 @@ export function SubscriptionProvider({ children }) {
       setLimits({});
       setUsage({});
       setOffers([]);
+      setRevenueCatIsPro(false);
     } finally {
       setIsLoading(false);
     }
@@ -181,7 +192,7 @@ export function SubscriptionProvider({ children }) {
     [user?.id, isGuest, LIMITED_OFFER_ID, ensureGuestOfferState],
   );
 
-  const isPro = isProStatus(effectiveSubscription);
+  const isPro = isProStatus(effectiveSubscription) || revenueCatIsPro;
 
   const canUseFeature = useCallback(
     (feature) => {

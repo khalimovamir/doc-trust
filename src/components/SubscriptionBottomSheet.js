@@ -29,6 +29,11 @@ import { useSubscription } from '../context/SubscriptionContext';
 import { useAuth } from '../context/AuthContext';
 import { useGuest } from '../context/GuestContext';
 import { grantManualSubscription } from '../lib/subscription';
+import {
+  isRevenueCatAvailable,
+  getRevenueCatOfferings,
+  purchaseRevenueCatPackage,
+} from '../lib/revenueCat';
 
 const CLOSE_DELAY_MS = 4000;
 const PROGRESS_RING_DIAMETER = 32;
@@ -472,6 +477,29 @@ export default function SubscriptionBottomSheet({ visible, onClose, offerId = nu
     }
     setSubmitting(true);
     try {
+      if (isRevenueCatAvailable()) {
+        const offerings = await getRevenueCatOfferings();
+        const pkg = offerings?.current?.availablePackages?.find(
+          (p) => p?.product?.identifier === selectedPlan.product_id
+        );
+        if (pkg) {
+          const purchaseResult = await purchaseRevenueCatPackage(pkg);
+          if (purchaseResult.customerInfo) {
+            await refreshSubscription();
+            closeSheet();
+            return;
+          }
+          if (purchaseResult.error && purchaseResult.error.userCancelled) {
+            setSubmitting(false);
+            return;
+          }
+          if (purchaseResult.error) {
+            Alert.alert(t('common.error'), purchaseResult.error?.message || t('subscription.errorSubscribe'));
+            setSubmitting(false);
+            return;
+          }
+        }
+      }
       const result = await grantManualSubscription(user.id, selectedPlan.product_id, offerId);
       if (result?.ok) {
         await refreshSubscription();
