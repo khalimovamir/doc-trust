@@ -91,8 +91,6 @@ function createStyles(colors) {
       height: 46,
       borderRadius: 23,
       backgroundColor: 'rgba(0,0,0,0.3)',
-      borderWidth: 1,
-      borderColor: '#000',
       paddingLeft: 14,
       paddingRight: 4,
       paddingTop: 4,
@@ -112,8 +110,6 @@ function createStyles(colors) {
       paddingHorizontal: 16,
       borderRadius: 19,
       backgroundColor: '#ffffff',
-      borderWidth: 1,
-      borderColor: '#000',
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -242,8 +238,15 @@ function createStyles(colors) {
       justifyContent: 'center',
     },
     scanningBannerText: { fontFamily, fontSize: 15, fontWeight: '600', color: '#fff' },
+    guideOverlayRoot: {
+      width: Dimensions.get('window').width,
+      height: Dimensions.get('window').height,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+    },
     guideOverlay: {
-      flex: 1,
+      ...StyleSheet.absoluteFillObject,
       justifyContent: 'center',
       alignItems: 'center',
       paddingHorizontal: 16,
@@ -567,7 +570,7 @@ export default function ScannerScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <Modal visible={infoGuideVisible} transparent animationType="fade">
-        <View style={styles.guideOverlay}>
+        <View style={styles.guideOverlayRoot}>
           <View style={styles.guideOverlayDark} pointerEvents="box-none" />
           <View style={styles.guideCard} pointerEvents="box-none">
             <View style={styles.guideCardTint} pointerEvents="none" />

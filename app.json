@@ -12,9 +12,9 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": false,
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/splash-transparent.png",
       "resizeMode": "contain",
-      "backgroundColor": "#e8f4fc"
+      "backgroundColor": "#0f1a2b"
     },
     "ios": {
       "supportsTablet": true,
@@ -46,7 +46,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon-foreground.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#2B72EE"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.anonymous.ailawyer",
@@ -64,6 +64,14 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-transparent.png",
+          "backgroundColor": "#0f1a2b"
+        }
+      ],
+      "./plugins/withSplashBackgroundOnly.js",
       "expo-apple-authentication",
       "expo-web-browser",
       "expo-image-picker",

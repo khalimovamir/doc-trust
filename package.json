@@ -30,7 +30,9 @@
     "ios:submit": "npx eas-cli submit --platform ios --profile production --latest",
     "web": "expo start --web",
     "start:dev": "expo start --clear",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "prebuild:android": "npx expo prebuild --platform android --clean && node scripts/patch-android-splash.js",
+    "prebuild:ios": "npx expo prebuild --platform ios --clean"
   },
   "dependencies": {
     "@expo/metro-config": "~54.0.14",
