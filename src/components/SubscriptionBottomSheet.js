@@ -45,8 +45,8 @@ const PROGRESS_RING_SVG_SIZE = 40;
 const PROGRESS_CIRCUMFERENCE = 2 * Math.PI * PROGRESS_RING_R;
 
 const FEATURE_CARDS = [
-  { title: 'Multiple document analysis', description: 'Ask anything, anytime', Icon: FileStack },
-  { title: 'Unlimited Legal Questions', description: 'Ask anything, anytime', Icon: MessageCircleQuestion },
+  { titleKey: 'featureCard1Title', descKey: 'featureCard1Desc', Icon: FileStack },
+  { titleKey: 'featureCard2Title', descKey: 'featureCard2Desc', Icon: MessageCircleQuestion },
 ];
 
 const FALLBACK_PLANS = [
@@ -606,10 +606,10 @@ export default function SubscriptionBottomSheet({ visible, onClose, offerId = nu
                     </View>
                     <View style={styles.featureCardTextCol}>
                       <Text style={styles.featureCardTitle} numberOfLines={1}>
-                        {item.title}
+                        {t(`subscription.${item.titleKey}`)}
                       </Text>
                       <Text style={styles.featureCardDesc} numberOfLines={1}>
-                        {item.description}
+                        {t(`subscription.${item.descKey}`)}
                       </Text>
                     </View>
                   </View>
@@ -651,17 +651,17 @@ export default function SubscriptionBottomSheet({ visible, onClose, offerId = nu
                         <Text style={styles.planTitle}>{planLabel.toUpperCase()}</Text>
                         {plan.interval === 'yearly' && (
                           <Text style={styles.planSubtitle}>
-                            {plan.price}/year {plan.pricePerWeek}
+                            {plan.price}{t('subscription.perYear')} {plan.pricePerWeek}
                           </Text>
                         )}
                         {plan.interval === 'weekly' && (
                           <Text style={styles.planSubtitle}>
-                            {trialText ? `${trialText}, then ` : ''}{plan.price}{t('subscription.perWeek')}
+                            {trialText ? `${trialText}, ${t('subscription.then')} ` : ''}{plan.price}{t('subscription.perWeek')}
                           </Text>
                         )}
                         {plan.interval === 'monthly' && (
                           <Text style={styles.planSubtitle}>
-                            {trialText ? `${trialText}, then ` : ''}{plan.price}{t('subscription.perMonth')}
+                            {trialText ? `${trialText}, ${t('subscription.then')} ` : ''}{plan.price}{t('subscription.perMonth')}
                           </Text>
                         )}
                       </View>
@@ -689,7 +689,7 @@ export default function SubscriptionBottomSheet({ visible, onClose, offerId = nu
                   <Text style={styles.continueButtonText}>
                     {isPro
                       ? t('subscription.youHavePro')
-                      : 'CONTINUE'}
+                      : t('subscription.continue')}
                   </Text>
                 )}
               </TouchableOpacity>
