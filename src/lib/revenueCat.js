@@ -25,8 +25,11 @@ export function isRevenueCatAvailable() {
  */
 export async function configureRevenueCat(userId = null) {
   if (!Purchases) return;
-  const apiKey =
-    Platform.OS === 'ios'
+  const testStoreKey = process.env.EXPO_PUBLIC_REVENUECAT_TEST_STORE_API_KEY;
+  const useTestStore = typeof __DEV__ !== 'undefined' && __DEV__ && testStoreKey && testStoreKey.trim().length > 0;
+  const apiKey = useTestStore
+    ? testStoreKey.trim()
+    : Platform.OS === 'ios'
       ? process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY
       : process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY;
   if (!apiKey) return;
@@ -90,6 +93,21 @@ export async function getRevenueCatIsPro() {
   const customerInfo = await Purchases.getCustomerInfo();
   const entitlement = customerInfo?.entitlements?.active?.[ENTITLEMENT_ID];
   return entitlement != null;
+}
+
+/**
+ * Restore previous purchases (e.g. after reinstall or new device).
+ * Call only in response to user action (e.g. Restore button); may trigger OS sign-in prompts.
+ * @returns {Promise<{ customerInfo: import('react-native-purchases').CustomerInfo } | { error: Error }>}
+ */
+export async function restoreRevenueCatPurchases() {
+  if (!Purchases) return { error: new Error('RevenueCat not installed') };
+  try {
+    const customerInfo = await Purchases.restorePurchases();
+    return { customerInfo };
+  } catch (e) {
+    return { error: e };
+  }
 }
 
 /**

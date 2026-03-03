@@ -46,7 +46,7 @@ function createStyles(colors) {
     textBlock: { paddingHorizontal: 4 },
     title: { fontFamily, fontSize: TITLE_SIZE, fontWeight: TITLE_FONT_WEIGHT, lineHeight: TITLE_SIZE * 1.25, color: colors.primaryText, textAlign: 'center', marginBottom: TITLE_MARGIN_BOTTOM },
     subtitle: { fontFamily, fontSize: SUBTITLE_SIZE, fontWeight: SUBTITLE_FONT_WEIGHT, lineHeight: SUBTITLE_SIZE * 1.5, color: colors.secondaryText, textAlign: 'center', marginBottom: SUBTITLE_MARGIN_BOTTOM },
-    footer: { paddingBottom: 0 },
+    footer: { paddingBottom: 20 },
     dots: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: DOTS_MARGIN_BOTTOM },
     dot: { width: DOT_SIZE, height: DOT_SIZE, borderRadius: DOT_SIZE / 2, backgroundColor: colors.tertiary, marginHorizontal: DOT_SPACING / 2 },
     dotActive: { backgroundColor: colors.primary },

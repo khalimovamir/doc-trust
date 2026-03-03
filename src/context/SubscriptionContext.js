@@ -110,9 +110,15 @@ export function SubscriptionProvider({ children }) {
         });
         setLimits(limitsMap);
         setOffers(offs || []);
-        setRevenueCatIsPro(false);
+        try {
+          const rcPro = await getRevenueCatIsPro();
+          setRevenueCatIsPro(rcPro);
+        } catch (_) {
+          setRevenueCatIsPro(false);
+        }
       } catch (e) {
         console.warn('Subscription load (guest) failed:', e?.message);
+        setRevenueCatIsPro(false);
       }
       setIsLoading(false);
       return;

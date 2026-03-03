@@ -75,11 +75,22 @@ EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY=goog_xxxxxxxxxxxx
 - В приложении уже есть свой экран подписки (`SubscriptionBottomSheet`), поэтому можно нажать **«Mark as done»** для шага «Create your first paywall» и не создавать визуальный Paywall в RevenueCat.
 - Если позже захотите использовать визуальный Paywall RevenueCat — можно добавить его и вызывать из кода вместо или вместе с текущим экраном.
 
-### Шаг 1.8. Проверка покупки (Sandbox)
+### Шаг 1.8. Тестовые платежи (два варианта)
+
+**Вариант A — Sandbox Apple/Google (реальный магазин, тестовый аккаунт):**
 
 - В RevenueCat включите **Sandbox data** (переключатель на Overview).
-- На устройстве/симуляторе войдите в **Sandbox-аккаунт** Apple (Настройки → App Store → Sandbox Account).
-- В приложении нажмите кнопку подписки и совершите тестовую покупку — в RevenueCat во вкладке **Customers** должна появиться запись, а в **Charts** — тестовый доход.
+- На устройстве/симуляторе войдите в **Sandbox-аккаунт** Apple: Настройки → App Store → внизу «Sandbox Account» (тестовый Apple ID из App Store Connect → Users and Access → Sandbox).
+- В приложении нажмите кнопку подписки и совершите тестовую покупку — в RevenueCat во вкладке **Customers** появится запись.
+
+**Вариант B — RevenueCat Test Store (без настройки App Store):**
+
+- В RevenueCat: **Apps and providers** → раздел **Test configuration** → **Create a Test Store** → скопировать **Test Store API key**.
+- В дашборде создать продукты и offering для Test Store (или использовать созданный по умолчанию).
+- В проекте в `.env` добавить:  
+  `EXPO_PUBLIC_REVENUECAT_TEST_STORE_API_KEY=rcb_xxxx` (подставить свой ключ).  
+  В режиме разработки (`__DEV__`) приложение будет использовать Test Store: при нажатии «Купить» откроется модалка с кнопками «Успех» / «Ошибка» / «Отмена» (без запроса к Apple/Google).
+- **Важно:** перед релизом убедитесь, что в production-сборках эта переменная не задана — иначе в сторе будет использоваться тестовый ключ.
 
 ---
 

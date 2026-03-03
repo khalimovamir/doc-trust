@@ -16,6 +16,7 @@ import {
   ActivityIndicator,
   Platform,
   useColorScheme,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Mail } from 'lucide-react-native';
@@ -24,6 +25,8 @@ import { CommonActions } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { useGuest } from '../context/GuestContext';
 import { signInWithGoogle, signInWithApple } from '../lib/auth';
+import { syncGuestToUserData } from '../lib/guestSync';
+import { PRIVACY_POLICY_URL, TERMS_OF_USE_URL } from '../lib/legalUrls';
 
 const LOGO_SIZE = 88;
 const LOGO_GAP = 20;
@@ -57,7 +60,7 @@ function createStyles(colors) {
     signInText: { fontFamily, fontSize: 14, color: colors.secondaryText },
     signInLink: { fontFamily, fontSize: 14, color: colors.primary },
     icon: { width: ICON_SIZE, height: ICON_SIZE },
-    legal: { paddingHorizontal: PAGE_PADDING, paddingBottom: PAGE_PADDING, paddingTop: 24 },
+    legal: { paddingHorizontal: PAGE_PADDING, paddingBottom: PAGE_PADDING + 12, paddingTop: 24 },
     legalText: { fontFamily, fontSize: 14, fontWeight: '400', color: colors.secondaryText, textAlign: 'center' },
     legalLink: { color: colors.primary },
   };
@@ -68,23 +71,36 @@ export default function GetStartedScreen({ navigation, route }) {
   const { colors } = useTheme();
   const colorScheme = useColorScheme();
   const { user } = useAuth();
-  const { setGuestMode } = useGuest();
+  const { setGuestMode, clearGuestMode } = useGuest();
   const styles = useMemo(() => StyleSheet.create(createStyles(colors)), [colors]);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [appleLoading, setAppleLoading] = useState(false);
   const fromSettings = route?.params?.fromSettings === true;
   const appleButtonContentColor = colorScheme === 'dark' ? '#000000' : '#ffffff';
 
+  const syncTimeoutRef = React.useRef(null);
+  // When guest signs in from Get Started (opened via Settings), sync guest data to Supabase, clear guest mode, go to Home
   React.useEffect(() => {
     if (!fromSettings || !user?.id) return;
-    const root = navigation.getParent();
-    const routeNames = root?.getState()?.routeNames ?? [];
-    if (routeNames.includes('Home')) {
-      root.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'Home' }] }));
-    } else if (navigation.canGoBack()) {
-      navigation.goBack();
-    }
-  }, [fromSettings, user?.id, navigation]);
+    let cancelled = false;
+    clearGuestMode();
+    (async () => {
+      await syncGuestToUserData(user.id);
+      if (cancelled) return;
+      syncTimeoutRef.current = setTimeout(() => {
+        const stack = navigation.getParent();
+        if (stack) {
+          stack.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'Home' }] }));
+        } else if (navigation.canGoBack()) {
+          navigation.goBack();
+        }
+      }, 50);
+    })();
+    return () => {
+      cancelled = true;
+      if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+    };
+  }, [fromSettings, user?.id, navigation, clearGuestMode]);
 
   const handleApple = async () => {
     if (Platform.OS !== 'ios') return;
@@ -114,8 +130,8 @@ export default function GetStartedScreen({ navigation, route }) {
   const handleSignIn = () => {
     navigation.navigate('SignIn');
   };
-  const handlePrivacyPolicy = () => {};
-  const handleTermsOfUse = () => {};
+  const handlePrivacyPolicy = () => Linking.openURL(PRIVACY_POLICY_URL).catch(() => {});
+  const handleTermsOfUse = () => Linking.openURL(TERMS_OF_USE_URL).catch(() => {});
   const handleSkip = () => {
     setGuestMode(true);
   };

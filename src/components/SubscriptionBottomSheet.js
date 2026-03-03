@@ -12,28 +12,29 @@ import {
   Modal,
   Pressable,
   Animated,
-  PanResponder,
   Dimensions,
   ScrollView,
   TouchableOpacity,
   Alert,
   ActivityIndicator,
   Image,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Check, X, FileStack, MessageCircleQuestion } from 'lucide-react-native';
+import { Check, X, Scan, GitCompare, ShieldCheck, MessageCircleQuestion } from 'lucide-react-native';
 import { IconAlertTriangleFilled } from '@tabler/icons-react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { fontFamily, spacing, borderRadius, useTheme } from '../theme';
 import { useSubscription } from '../context/SubscriptionContext';
 import { useAuth } from '../context/AuthContext';
 import { useGuest } from '../context/GuestContext';
-import { grantManualSubscription } from '../lib/subscription';
 import {
   isRevenueCatAvailable,
   getRevenueCatOfferings,
   purchaseRevenueCatPackage,
+  restoreRevenueCatPurchases,
 } from '../lib/revenueCat';
+import { PRIVACY_POLICY_URL, TERMS_OF_USE_URL } from '../lib/legalUrls';
 
 const CLOSE_DELAY_MS = 4000;
 const PROGRESS_RING_DIAMETER = 32;
@@ -45,8 +46,10 @@ const PROGRESS_RING_SVG_SIZE = 40;
 const PROGRESS_CIRCUMFERENCE = 2 * Math.PI * PROGRESS_RING_R;
 
 const FEATURE_CARDS = [
-  { titleKey: 'featureCard1Title', descKey: 'featureCard1Desc', Icon: FileStack },
-  { titleKey: 'featureCard2Title', descKey: 'featureCard2Desc', Icon: MessageCircleQuestion },
+  { titleKey: 'featureCard1Title', descKey: 'featureCard1Desc', Icon: Scan },
+  { titleKey: 'featureCard2Title', descKey: 'featureCard2Desc', Icon: GitCompare },
+  { titleKey: 'featureCard3Title', descKey: 'featureCard3Desc', Icon: ShieldCheck },
+  { titleKey: 'featureCard4Title', descKey: 'featureCard4Desc', Icon: MessageCircleQuestion },
 ];
 
 const FALLBACK_PLANS = [
@@ -82,6 +85,7 @@ function formatPrice(cents, currency = 'USD') {
 }
 
 const SCREEN_HEIGHT = Dimensions.get('window').height || 800;
+const SCREEN_WIDTH = Dimensions.get('window').width || 400;
 
 function createStyles(colors) {
   return {
@@ -91,10 +95,10 @@ function createStyles(colors) {
     },
     sheetColumn: {
       position: 'absolute',
-      left: 0,
       right: 0,
       top: 0,
       bottom: 0,
+      width: SCREEN_WIDTH,
       height: SCREEN_HEIGHT,
       flexDirection: 'column',
       alignItems: 'stretch',
@@ -172,7 +176,7 @@ function createStyles(colors) {
     },
     title: {
       fontFamily,
-      fontSize: 32,
+      fontSize: 30,
       fontWeight: '700',
       color: colors.primaryText,
       textAlign: 'center',
@@ -214,7 +218,7 @@ function createStyles(colors) {
       justifyContent: 'center',
     },
     featureCardTextCol: {
-      marginLeft: 16,
+      marginLeft: 12,
       gap: 4,
       flex: 1,
       minWidth: 0,
@@ -334,10 +338,11 @@ export default function SubscriptionBottomSheet({ visible, onClose, offerId = nu
 
   const [selectedPlanIndex, setSelectedPlanIndex] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const [showCloseButton, setShowCloseButton] = useState(false);
   const [closeProgress, setCloseProgress] = useState(0);
   const closeProgressRef = useRef(null);
-  const sheetTranslateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const sheetTranslateX = useRef(new Animated.Value(SCREEN_WIDTH)).current;
 
   const plans = useMemo(() => {
     const isLimitedOffer = offerProductId === OFFER_PRODUCT_ID;
@@ -400,8 +405,8 @@ export default function SubscriptionBottomSheet({ visible, onClose, offerId = nu
       setSelectedPlanIndex(0);
       setShowCloseButton(false);
       setCloseProgress(0);
-      sheetTranslateY.setValue(SCREEN_HEIGHT);
-      Animated.spring(sheetTranslateY, {
+      sheetTranslateX.setValue(SCREEN_WIDTH);
+      Animated.spring(sheetTranslateX, {
         toValue: 0,
         useNativeDriver: false,
         tension: 65,
@@ -419,7 +424,7 @@ export default function SubscriptionBottomSheet({ visible, onClose, offerId = nu
         }
       }, 50);
     } else {
-      sheetTranslateY.setValue(SCREEN_HEIGHT);
+      sheetTranslateX.setValue(SCREEN_WIDTH);
       if (closeProgressRef.current) {
         clearInterval(closeProgressRef.current);
         closeProgressRef.current = null;
@@ -428,11 +433,11 @@ export default function SubscriptionBottomSheet({ visible, onClose, offerId = nu
     return () => {
       if (closeProgressRef.current) clearInterval(closeProgressRef.current);
     };
-  }, [visible, sheetTranslateY]);
+  }, [visible, sheetTranslateX]);
 
   const closeSheet = () => {
-    Animated.timing(sheetTranslateY, {
-      toValue: SCREEN_HEIGHT,
+    Animated.timing(sheetTranslateX, {
+      toValue: SCREEN_WIDTH,
       duration: 220,
       useNativeDriver: false,
     }).start(({ finished }) => {
@@ -440,93 +445,68 @@ export default function SubscriptionBottomSheet({ visible, onClose, offerId = nu
     });
   };
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponderCapture: (_, gesture) => {
-        const dy = gesture.dy;
-        const dx = gesture.dx;
-        return dy > 8 && Math.abs(dy) > Math.abs(dx);
-      },
-      onPanResponderMove: (_, gesture) => {
-        const y = gesture.dy;
-        const val = y >= 0 ? y : Math.max(-40, y);
-        sheetTranslateY.setValue(val);
-      },
-      onPanResponderRelease: (_, gesture) => {
-        const dy = gesture.dy;
-        const vy = gesture.vy;
-        if (dy > 100 || vy > 0.6) {
+  const handleRestore = async () => {
+    if (restoring || !isRevenueCatAvailable()) return;
+    setRestoring(true);
+    try {
+      const result = await restoreRevenueCatPurchases();
+      if (result.customerInfo) {
+        await refreshSubscription();
+        const hasPro = result.customerInfo?.entitlements?.active?.['DocTrust Pro'] != null;
+        if (hasPro) {
+          Alert.alert(t('subscription.youHavePro'), '', [{ text: t('common.done'), onPress: closeSheet }]);
           closeSheet();
-          return;
+        } else {
+          Alert.alert(t('subscription.restore'), t('subscription.restoreNoSubscription'));
         }
-        Animated.spring(sheetTranslateY, {
-          toValue: 0,
-          useNativeDriver: false,
-          tension: 80,
-          friction: 12,
-        }).start();
-      },
-    })
-  ).current;
+      } else {
+        Alert.alert(t('common.error'), result.error?.message || t('subscription.errorSubscribe'));
+      }
+    } catch (e) {
+      Alert.alert(t('common.error'), e?.message || t('subscription.errorSubscribe'));
+    } finally {
+      setRestoring(false);
+    }
+  };
 
   const handleContinue = async () => {
     if (isPro) {
       closeSheet();
       return;
     }
-    if (isGuest && !user?.id) {
-      if (!selectedPlan?.product_id) {
-        Alert.alert(t('common.error'), t('subscription.errorSelectPlan'));
-        return;
-      }
-      setSubmitting(true);
-      try {
-        setGuestSubscription({ tier: 'pro', status: 'active', product_id: selectedPlan.product_id, offer_id: offerId });
-        await refreshSubscription();
-        closeSheet();
-      } catch (e) {
-        Alert.alert(t('common.error'), e?.message || t('subscription.errorSubscribe'));
-      } finally {
-        setSubmitting(false);
-      }
+    if (!selectedPlan?.product_id) {
+      Alert.alert(t('common.error'), t('subscription.errorSelectPlan'));
       return;
     }
-    if (!user?.id || !selectedPlan?.product_id) {
-      Alert.alert(t('common.error'), t('subscription.errorSelectPlan'));
+    if (!isRevenueCatAvailable()) {
+      Alert.alert(t('common.error'), t('subscription.errorSubscribe'));
       return;
     }
     setSubmitting(true);
     try {
-      if (isRevenueCatAvailable()) {
-        const offerings = await getRevenueCatOfferings();
-        const pkg = offerings?.current?.availablePackages?.find(
-          (p) => p?.product?.identifier === selectedPlan.product_id
-        );
-        if (pkg) {
-          const purchaseResult = await purchaseRevenueCatPackage(pkg);
-          if (purchaseResult.customerInfo) {
-            await refreshSubscription();
-            closeSheet();
-            return;
-          }
-          if (purchaseResult.error && purchaseResult.error.userCancelled) {
-            setSubmitting(false);
-            return;
-          }
-          if (purchaseResult.error) {
-            Alert.alert(t('common.error'), purchaseResult.error?.message || t('subscription.errorSubscribe'));
-            setSubmitting(false);
-            return;
-          }
-        }
+      const offerings = await getRevenueCatOfferings();
+      const pkg = offerings?.current?.availablePackages?.find(
+        (p) => p?.product?.identifier === selectedPlan.product_id
+      );
+      if (!pkg) {
+        Alert.alert(t('common.error'), t('subscription.errorSubscribe'));
+        setSubmitting(false);
+        return;
       }
-      const result = await grantManualSubscription(user.id, selectedPlan.product_id, offerId);
-      if (result?.ok) {
+      const purchaseResult = await purchaseRevenueCatPackage(pkg);
+      if (purchaseResult.customerInfo) {
         await refreshSubscription();
         closeSheet();
-      } else {
-        Alert.alert(t('common.error'), result?.error || t('subscription.errorSubscribe'));
+        return;
       }
+      if (purchaseResult.error?.userCancelled) {
+        setSubmitting(false);
+        return;
+      }
+      Alert.alert(
+        t('common.error'),
+        purchaseResult.error?.message || t('subscription.errorSubscribe')
+      );
     } catch (e) {
       Alert.alert(t('common.error'), e?.message || t('subscription.errorSubscribe'));
     } finally {
@@ -543,10 +523,9 @@ export default function SubscriptionBottomSheet({ visible, onClose, offerId = nu
       visible={visible}
       onRequestClose={closeSheet}
     >
-      <Pressable style={styles.backdrop} onPress={closeSheet} />
+      <Pressable style={styles.backdrop} />
       <Animated.View
-        style={[styles.sheetColumn, { transform: [{ translateY: sheetTranslateY }] }]}
-        {...panResponder.panHandlers}
+        style={[styles.sheetColumn, { transform: [{ translateX: sheetTranslateX }] }]}
       >
         <View style={styles.sheet}>
           <View style={[styles.appBar, { paddingTop: Math.max(insets.top, spacing.md) + 8 }]}>
@@ -715,13 +694,15 @@ export default function SubscriptionBottomSheet({ visible, onClose, offerId = nu
               </TouchableOpacity>
 
               <View style={styles.footerLinks}>
-                <TouchableOpacity onPress={() => {}}>
+                <TouchableOpacity onPress={() => Linking.openURL(TERMS_OF_USE_URL).catch(() => {})}>
                   <Text style={styles.footerLink}>Terms of Use</Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => {}}>
-                  <Text style={styles.footerLink}>{t('subscription.restore')}</Text>
+                <TouchableOpacity onPress={handleRestore} disabled={restoring}>
+                  <Text style={[styles.footerLink, restoring && { opacity: 0.6 }]}>
+                    {restoring ? t('subscription.restoring') : t('subscription.restore')}
+                  </Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => {}}>
+                <TouchableOpacity onPress={() => Linking.openURL(PRIVACY_POLICY_URL).catch(() => {})}>
                   <Text style={styles.footerLink}>Privacy Policy</Text>
                 </TouchableOpacity>
               </View>

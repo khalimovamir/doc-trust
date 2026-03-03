@@ -81,7 +81,7 @@ function createStyles(colors) {
       elevation: 10,
     },
     limitCardWrap: {
-      marginHorizontal: 16,
+      marginHorizontal: 24,
       marginBottom: 12,
     },
     bottomSection: {

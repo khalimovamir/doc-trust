@@ -25,6 +25,8 @@ import IconButton from '../components/IconButton';
 import { CommonActions } from '@react-navigation/native';
 import { signInWithEmail } from '../lib/auth';
 import { isValidEmail } from '../lib/validation';
+import { useGuest } from '../context/GuestContext';
+import { syncGuestToUserData } from '../lib/guestSync';
 
 function createStyles(colors) {
   return {
@@ -46,6 +48,7 @@ function createStyles(colors) {
 export default function SignInScreen({ navigation }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
+  const { clearGuestMode } = useGuest();
   const styles = useMemo(() => StyleSheet.create(createStyles(colors)), [colors]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -72,12 +75,13 @@ export default function SignInScreen({ navigation }) {
     }
     setLoading(true);
     try {
-      await signInWithEmail(trimmedEmail, password);
-      // If we're in AppStack (guest opened SignIn from Settings), go to Home
-      const root = navigation.getParent();
-      const routeNames = root?.getState()?.routeNames ?? [];
-      if (routeNames.includes('Home')) {
-        root.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'Home' }] }));
+      const { user: signedInUser } = await signInWithEmail(trimmedEmail, password);
+      clearGuestMode();
+      if (signedInUser?.id) await syncGuestToUserData(signedInUser.id);
+      // If we're in AppStack (guest opened SignIn from Settings/Get Started), go to Home
+      const stack = navigation.getParent();
+      if (stack) {
+        stack.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'Home' }] }));
       }
     } catch (e) {
       setPasswordError(e?.message || t('auth.signInFailed'));

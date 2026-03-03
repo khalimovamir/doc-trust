@@ -15,8 +15,10 @@ import {
   Switch,
   Alert,
   Platform,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { PRIVACY_POLICY_URL, TERMS_OF_USE_URL } from '../lib/legalUrls';
 import {
   ChevronRight,
   Check,
@@ -154,41 +156,39 @@ export default function SettingsScreen({ navigation }) {
             </TouchableOpacity>
           )}
 
-          {!isPro ? (
-            <TouchableOpacity
-              style={styles.proCard}
-              activeOpacity={0.8}
-              onPress={() => openSubscriptionBottomSheet?.()}
-            >
-              <View style={styles.proTitleRow}>
-                <Text style={styles.proTitle}>{t('settings.proTitle')}</Text>
-                <TouchableOpacity
-                  style={styles.upgradeBtn}
-                  activeOpacity={0.8}
-                  onPress={(e) => { e?.stopPropagation?.(); openSubscriptionBottomSheet?.(); }}
-                >
-                  <Text style={styles.upgradeText}>{t('settings.upgrade')}</Text>
-                </TouchableOpacity>
-              </View>
+          <TouchableOpacity
+            style={styles.proCard}
+            activeOpacity={0.8}
+            onPress={() => openSubscriptionBottomSheet?.()}
+          >
+            <View style={styles.proTitleRow}>
+              <Text style={styles.proTitle}>{t('settings.proTitle')}</Text>
+              <TouchableOpacity
+                style={[styles.upgradeBtn, isPro && styles.upgradeBtnActive]}
+                activeOpacity={0.8}
+                onPress={(e) => { e?.stopPropagation?.(); openSubscriptionBottomSheet?.(); }}
+              >
+                <Text style={styles.upgradeText}>{t(isPro ? 'settings.active' : 'settings.upgrade')}</Text>
+              </TouchableOpacity>
+            </View>
 
-              <View style={styles.proList}>
-                {(features?.length ? features.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)) : [
-                  { feature: 'document_check' },
-                  { feature: 'ai_lawyer' },
-                  { feature: 'document_compare' },
-                ]).map((f, i) => {
-                  const titleKey = f.feature === 'document_check' ? 'settings.proFeatureDocumentCheck' : f.feature === 'ai_lawyer' ? 'settings.proFeatureAILawyer' : f.feature === 'document_compare' ? 'settings.proFeatureDocumentCompare' : null;
-                  const title = titleKey ? t(titleKey) : (f.title || f);
-                  return (
-                    <View key={f.feature || i} style={styles.proItem}>
-                      <Check size={24} color={colors.secondaryText} strokeWidth={2} />
-                      <Text style={styles.proItemText}>{title}</Text>
-                    </View>
-                  );
-                })}
-              </View>
-            </TouchableOpacity>
-          ) : null}
+            <View style={styles.proList}>
+              {(features?.length ? features.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)) : [
+                { feature: 'document_check' },
+                { feature: 'ai_lawyer' },
+                { feature: 'document_compare' },
+              ]).map((f, i) => {
+                const titleKey = f.feature === 'document_check' ? 'settings.proFeatureDocumentCheck' : f.feature === 'ai_lawyer' ? 'settings.proFeatureAILawyer' : f.feature === 'document_compare' ? 'settings.proFeatureDocumentCompare' : null;
+                const title = titleKey ? t(titleKey) : (f.title || f);
+                return (
+                  <View key={f.feature || i} style={styles.proItem}>
+                    <Check size={24} color={colors.secondaryText} strokeWidth={2} />
+                    <Text style={styles.proItemText}>{title}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.section}>
@@ -258,6 +258,7 @@ export default function SettingsScreen({ navigation }) {
             subtitle={t('settings.privacyPolicySubtitle')}
             rowStyles={styles}
             colors={colors}
+            onPress={() => Linking.openURL(PRIVACY_POLICY_URL).catch(() => {})}
           />
           <SettingsRow
             icon={<FileText size={22} color={colors.primary} strokeWidth={2} />}
@@ -265,6 +266,7 @@ export default function SettingsScreen({ navigation }) {
             subtitle={t('settings.termsOfUseSubtitle')}
             rowStyles={styles}
             colors={colors}
+            onPress={() => Linking.openURL(TERMS_OF_USE_URL).catch(() => {})}
           />
           <SettingsRow
             icon={<Lightbulb size={22} color={colors.primary} strokeWidth={2} />}

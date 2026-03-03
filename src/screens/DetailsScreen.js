@@ -516,7 +516,7 @@ function IssueCard({ item, onAskAi, askAiLabel = 'Ask AI', copyTextLabel = 'Copy
   };
   return (
     <View style={styles.issueCard}>
-      {/* Type badge + Section */}
+      {/* Type badge */}
       <View style={styles.issueCardHeader}>
         <View style={[styles.issueTypeBadge, { backgroundColor: config.bgColor }]}>
           <TypeIcon size={20} color={config.color} strokeWidth={2} />
@@ -524,8 +524,9 @@ function IssueCard({ item, onAskAi, askAiLabel = 'Ask AI', copyTextLabel = 'Copy
             {config.label}
           </Text>
         </View>
-        <Text style={styles.issueSectionText}>{item.section}</Text>
       </View>
+      {/* Section text below badge */}
+      {item.section ? <Text style={styles.issueSectionText}>{item.section}</Text> : null}
 
       {/* Title */}
       <Text style={styles.issueTitle}>{item.title}</Text>
@@ -1547,7 +1548,6 @@ function createStyles(colors) {
   },
   issueCardHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'flex-start',
   },
   issueTypeBadge: {

@@ -165,11 +165,13 @@ export async function clearGuestChats() {
  * Image URLs from guest (data URIs) are not uploaded; messages get image_url = null.
  * @param {string} userId - Supabase user id
  * @param {Object} chatApi - { createChat, addChatMessage } from '../lib/chat'
+ * @param {Object} [guestToSupabaseAnalysisId] - Map guest analysis id → Supabase analysis id (from migrateGuestAnalysesToSupabase)
  */
-export async function migrateGuestChatsToSupabase(userId, chatApi) {
+export async function migrateGuestChatsToSupabase(userId, chatApi, guestToSupabaseAnalysisId = {}) {
   if (!userId || !chatApi?.createChat || !chatApi?.addChatMessage) return;
   const guestChats = await getGuestChats();
   if (guestChats.length === 0) return;
+  const map = guestToSupabaseAnalysisId && typeof guestToSupabaseAnalysisId === 'object' ? guestToSupabaseAnalysisId : {};
   for (const chat of guestChats) {
     try {
       const context = [chat.context_type, chat.context_title, chat.context_data].some(Boolean)
@@ -179,7 +181,9 @@ export async function migrateGuestChatsToSupabase(userId, chatApi) {
             context_data: chat.context_data || null,
           }
         : null;
-      const created = await chatApi.createChat(userId, chat.title || 'New chat', context, null);
+      const guestAnalysisId = chat.context_data?.analysisId;
+      const analysisId = guestAnalysisId && map[guestAnalysisId] ? map[guestAnalysisId] : null;
+      const created = await chatApi.createChat(userId, chat.title || 'New chat', context, analysisId);
       const msgs = await getGuestChatMessages(chat.id);
       for (const m of msgs) {
         await chatApi.addChatMessage(created.id, m.role, m.content, null, m.image_url && m.image_url.startsWith('http') ? m.image_url : null);
@@ -188,5 +192,4 @@ export async function migrateGuestChatsToSupabase(userId, chatApi) {
       console.warn('Guest chat migrate failed for', chat.id, e?.message);
     }
   }
-  // Do not clear guest chats: keep local data for two-way guest ↔ Supabase behaviour.
 }

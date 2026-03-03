@@ -131,9 +131,11 @@ export async function deleteGuestAnalysis(analysisId) {
  * Copy guest analyses to Supabase for the given user (on sign-in). Local data is kept (two-way).
  * @param {string} userId
  * @param {Object} api - { saveDocumentWithAnalysis }
+ * @returns {Promise<Object>} Map guest analysis id → Supabase analysis id (for linking chats)
  */
 export async function migrateGuestAnalysesToSupabase(userId, api) {
-  if (!userId || !api?.saveDocumentWithAnalysis) return;
+  const guestToSupabase = {};
+  if (!userId || !api?.saveDocumentWithAnalysis) return guestToSupabase;
   const { list, byId } = await getData();
   for (const item of list) {
     const full = byId[item.id];
@@ -161,10 +163,11 @@ export async function migrateGuestAnalysesToSupabase(userId, api) {
       })),
     };
     try {
-      await api.saveDocumentWithAnalysis(userId, full.text_content, source, analysisResult);
+      const { analysisId } = await api.saveDocumentWithAnalysis(userId, full.text_content, source, analysisResult);
+      if (analysisId) guestToSupabase[item.id] = analysisId;
     } catch (e) {
       console.warn('Guest analysis migrate failed for', item.id, e?.message);
     }
   }
-  // Do not clear guest analyses (two-way).
+  return guestToSupabase;
 }

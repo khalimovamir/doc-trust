@@ -22,6 +22,7 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -30,6 +31,7 @@ import {
   Files,
   ArrowRight,
   X,
+  Crown,
 } from 'lucide-react-native';
 import {
   IconRosetteDiscountCheckFilled,
@@ -47,6 +49,12 @@ import { SkeletonScanOrHistoryCard } from '../components/Skeleton';
 
 import { formatDateShort } from '../lib/dateFormat';
 import { getTextFromImageUri } from '../lib/uploadDocument';
+import {
+  isRevenueCatAvailable,
+  getRevenueCatOfferings,
+  purchaseRevenueCatPackage,
+} from '../lib/revenueCat';
+import { PRIVACY_POLICY_URL, TERMS_OF_USE_URL } from '../lib/legalUrls';
 
 function getRiskLabelKey(score) {
   const s = Number(score);
@@ -129,6 +137,7 @@ export default function HomeScreen({ navigation }) {
     isLoading: subscriptionLoading,
     openSubscriptionIfLimitReached,
     openSubscriptionBottomSheet,
+    refreshSubscription,
   } = useSubscription();
 
   /** Limited offer discount % vs weekly: (1 - offerPrice / (52×weeklyPrice))×100. Fallback 50 if unknown. */
@@ -146,6 +155,7 @@ export default function HomeScreen({ navigation }) {
   const [recentScansLoading, setRecentScansLoading] = useState(false);
   const [totalAnalysesCount, setTotalAnalysesCount] = useState(0);
   const [isOfferSheetVisible, setIsOfferSheetVisible] = useState(false);
+  const [offerPurchasing, setOfferPurchasing] = useState(false);
   const [countdown, setCountdown] = useState({ h: 0, m: 0, s: 0 });
   const sheetTranslateY = useRef(new Animated.Value(Number(SCREEN_HEIGHT) || 800)).current;
 
@@ -296,18 +306,49 @@ export default function HomeScreen({ navigation }) {
       if (finished) setIsOfferSheetVisible(false);
     });
   };
-  const handleGetOffer = () => {
-    const h = Number(SCREEN_HEIGHT) || 800;
-    Animated.timing(sheetTranslateY, {
-      toValue: h,
-      duration: 220,
-      useNativeDriver: false,
-    }).start(({ finished }) => {
-      if (finished) {
-        setIsOfferSheetVisible(false);
-        openSubscriptionBottomSheet?.({ offerProductId: 'pro_yearly_offer' });
+  const handleGetOffer = async () => {
+    if (offerPurchasing) return;
+    if (!isRevenueCatAvailable()) {
+      Alert.alert(t('common.error'), t('subscription.errorSubscribe'));
+      return;
+    }
+    setOfferPurchasing(true);
+    try {
+      const offerings = await getRevenueCatOfferings();
+      const pkg = offerings?.current?.availablePackages?.find(
+        (p) => p?.product?.identifier === 'pro_yearly_offer'
+      );
+      if (!pkg) {
+        Alert.alert(t('common.error'), t('subscription.errorSubscribe'));
+        setOfferPurchasing(false);
+        return;
       }
-    });
+      const result = await purchaseRevenueCatPackage(pkg);
+      if (result.customerInfo) {
+        await refreshSubscription?.();
+        const h = Number(SCREEN_HEIGHT) || 800;
+        Animated.timing(sheetTranslateY, {
+          toValue: h,
+          duration: 220,
+          useNativeDriver: false,
+        }).start(({ finished }) => {
+          if (finished) setIsOfferSheetVisible(false);
+        });
+        return;
+      }
+      if (result.error?.userCancelled) {
+        setOfferPurchasing(false);
+        return;
+      }
+      Alert.alert(
+        t('common.error'),
+        result.error?.message || t('subscription.errorSubscribe')
+      );
+    } catch (e) {
+      Alert.alert(t('common.error'), e?.message || t('subscription.errorSubscribe'));
+    } finally {
+      setOfferPurchasing(false);
+    }
   };
   const handleScanPress = (item) => {
     navigation.navigate('Details', { analysisId: item.id });
@@ -359,6 +400,7 @@ export default function HomeScreen({ navigation }) {
             onPress={handleProPress}
             activeOpacity={0.8}
           >
+            <Crown size={22} color="rgba(0,0,0,0.64)" fill="rgba(0,0,0,0.64)" />
             <Text style={styles.proButtonText}>PRO</Text>
           </TouchableOpacity>
         ) : null}
@@ -531,24 +573,37 @@ export default function HomeScreen({ navigation }) {
             const limitedOfferProduct = products?.find((p) => p.product_id === 'pro_yearly_offer');
             const limitedOfferPriceCents = limitedOfferProduct?.price_cents ?? 1499;
             const currency = limitedOfferProduct?.currency ?? 'USD';
-            const perMonth = Math.round(limitedOfferPriceCents / 12);
+            const perWeek = Math.round(limitedOfferPriceCents / 52);
             return (
               <>
                 <Text style={styles.offerPrice}>{formatPrice(limitedOfferPriceCents, currency)} {t('home.offerYearly')}</Text>
-                <Text style={styles.offerPriceSub}>{t('home.offerOnlyPerMonth', { price: formatPrice(perMonth, currency) })}</Text>
+                <Text style={styles.offerPriceSub}>{t('home.offerOnlyPerWeek', { price: formatPrice(perWeek, currency) })}</Text>
               </>
             );
           })()}
 
-          <TouchableOpacity style={styles.offerCta} activeOpacity={0.9} onPress={handleGetOffer}>
-            <Text style={styles.offerCtaText}>
-              {t('home.getOfferCta', { discount: `${limitedOfferDiscountPercent}%` })}
-            </Text>
+          <TouchableOpacity
+            style={styles.offerCta}
+            activeOpacity={0.9}
+            onPress={handleGetOffer}
+            disabled={offerPurchasing}
+          >
+            {offerPurchasing ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <Text style={styles.offerCtaText}>
+                {t('home.getOfferCta', { discount: `${limitedOfferDiscountPercent}%` })}
+              </Text>
+            )}
           </TouchableOpacity>
 
           <View style={styles.offerFooterLinks}>
-            <Text style={styles.offerFooterLink}>Terms of Use</Text>
-            <Text style={styles.offerFooterLink}>Privacy Policy</Text>
+            <TouchableOpacity onPress={() => Linking.openURL(TERMS_OF_USE_URL).catch(() => {})}>
+              <Text style={styles.offerFooterLink}>Terms of Use</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => Linking.openURL(PRIVACY_POLICY_URL).catch(() => {})}>
+              <Text style={styles.offerFooterLink}>Privacy Policy</Text>
+            </TouchableOpacity>
           </View>
 
           </View>
@@ -575,18 +630,20 @@ function createStyles(colors) {
       backgroundColor: colors.primaryBackground,
     },
     proButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
       height: 32,
       borderRadius: 16,
-      backgroundColor: colors.primary,
+      backgroundColor: '#FFC247',
       paddingHorizontal: 12,
-      justifyContent: 'center',
-      alignItems: 'center',
     },
     proButtonText: {
       fontFamily,
       fontSize: 16,
       fontWeight: '600',
-      color: '#ffffff',
+      color: 'rgba(0,0,0,0.64)',
     },
     scroll: { flex: 1 },
     scrollContent: {
