@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { AppState, View, Text, StyleSheet, Image, useColorScheme } from 'react-native';
+import { AppState, View, Text, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 SplashScreen.preventAutoHideAsync();
-import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider, useTheme } from './src/theme';
 import { AuthProvider } from './src/context/AuthContext';
 import { GuestProvider, useGuest } from './src/context/GuestContext';
@@ -27,7 +27,6 @@ import { ensureI18n, getAppLanguageCode } from './src/i18n';
 import { AppLanguageProvider } from './src/context/AppLanguageContext';
 import { SentFeatureRequestsProvider } from './src/context/SentFeatureRequestsContext';
 import ErrorBoundary from './src/components/ErrorBoundary';
-import { lightColors, darkColors } from './src/theme/colors';
 
 function getSupabaseUrl() {
   const v = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -174,58 +173,8 @@ function StatusBarThemed() {
   );
 }
 
-const SPLASH_DURATION_MS = 2000;
-
-function CustomSplashScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
-  const colors = isDark ? darkColors : lightColors;
-  return (
-    <View style={[customSplashStyles.container, { backgroundColor: colors.secondaryBackground }]}>
-      <StatusBar style={isDark ? 'light' : 'dark'} backgroundColor={colors.secondaryBackground} />
-      <View style={customSplashStyles.centeredGroup}>
-        <View style={customSplashStyles.logoWrap}>
-          <Image source={require('./assets/adaptive-icon-foreground.png')} style={customSplashStyles.logoImage} resizeMode="contain" />
-        </View>
-        <Text style={customSplashStyles.title}>
-          <Text style={{ color: colors.primaryText }}>Doc</Text>
-          <Text style={{ color: colors.primary }}>Trust</Text>
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-const customSplashStyles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  centeredGroup: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoWrap: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
-    overflow: 'hidden',
-    marginBottom: 16,
-  },
-  logoImage: {
-    width: 80,
-    height: 80,
-  },
-  title: {
-    fontSize: 30,
-    fontWeight: '800',
-  },
-});
-
 function App() {
   const [i18nReady, setI18nReady] = useState(false);
-  const [splashHidden, setSplashHidden] = useState(false);
 
   useEffect(() => {
     ensureI18n()
@@ -240,22 +189,11 @@ function App() {
     return () => sub?.remove?.();
   }, []);
 
-  useEffect(() => {
-    if (!i18nReady) return;
-    let timeoutId;
-    (async () => {
-      await SplashScreen.hideAsync();
-      timeoutId = setTimeout(() => setSplashHidden(true), SPLASH_DURATION_MS);
-    })();
-    return () => timeoutId != null && clearTimeout(timeoutId);
-  }, [i18nReady]);
-
   if (!hasSupabaseConfig) {
     return <ConfigMissingScreen />;
   }
 
   if (!i18nReady) return null;
-  if (!splashHidden) return <CustomSplashScreen />;
 
   return (
     <ErrorBoundary navigationRef={navigationRefHolder}>

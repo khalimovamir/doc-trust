@@ -31,7 +31,9 @@
     "web": "expo start --web",
     "start:dev": "expo start --clear",
     "postinstall": "patch-package",
-    "prebuild:android": "npx expo prebuild --platform android --clean && node scripts/patch-android-splash.js",
+    "prebuild:android": "node scripts/generate-android-adaptive-icon.js && npx expo prebuild --platform android --clean && node scripts/patch-android-splash.js",
+    "icon:android-padded": "node scripts/generate-android-adaptive-icon.js",
+    "splash:generate": "node scripts/generate-splash-with-radius.js",
     "prebuild:ios": "npx expo prebuild --platform ios --clean"
   },
   "dependencies": {
@@ -87,6 +89,7 @@
     "eas-cli": "^13.0.0",
     "jest": "~29.7.0",
     "patch-package": "^8.0.0",
+    "sharp": "^0.34.5",
     "typescript": "~5.9.2"
   }
 }

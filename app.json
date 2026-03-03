@@ -8,13 +8,13 @@
     ],
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon-backup.png",
+    "icon": "./assets/adaptive-icon-foreground.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": false,
     "splash": {
-      "image": "./assets/splash-transparent.png",
+      "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0f1a2b"
+      "backgroundColor": "#EBF0F9"
     },
     "ios": {
       "supportsTablet": true,
@@ -45,7 +45,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon-foreground.png",
+        "foregroundImage": "./assets/adaptive-icon-foreground-padded.png",
         "backgroundColor": "#2B72EE"
       },
       "edgeToEdgeEnabled": true,
@@ -67,11 +67,12 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/splash-transparent.png",
-          "backgroundColor": "#0f1a2b"
+          "image": "./assets/splash.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#EBF0F9"
         }
       ],
-      "./plugins/withSplashBackgroundOnly.js",
+      "./plugins/withSplashFullScreen.js",
       "expo-apple-authentication",
       "expo-web-browser",
       "expo-image-picker",

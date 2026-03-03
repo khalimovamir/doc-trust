@@ -131,6 +131,16 @@ export default function HomeScreen({ navigation }) {
     openSubscriptionBottomSheet,
   } = useSubscription();
 
+  /** Limited offer discount % vs weekly: (1 - offerPrice / (52×weeklyPrice))×100. Fallback 50 if unknown. */
+  const limitedOfferDiscountPercent = useMemo(() => {
+    const offer = products?.find((p) => p.product_id === 'pro_yearly_offer');
+    const weekly = products?.find((p) => p.interval === 'weekly' || p.product_id === 'pro_weekly');
+    if (!offer?.price_cents || !weekly?.price_cents) return 50;
+    const refCents = 52 * weekly.price_cents;
+    const pct = Math.round((1 - offer.price_cents / refCents) * 100);
+    return Math.min(99, Math.max(1, pct));
+  }, [products]);
+
   const [scanning, setScanning] = useState(false);
   const [recentScans, setRecentScans] = useState([]);
   const [recentScansLoading, setRecentScansLoading] = useState(false);
@@ -343,13 +353,15 @@ export default function HomeScreen({ navigation }) {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.appBar}>
         <Text style={styles.headerTitle}>{t('home.headerTitle')}</Text>
-        <TouchableOpacity
-          style={styles.proButton}
-          onPress={handleProPress}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.proButtonText}>PRO</Text>
-        </TouchableOpacity>
+        {!isPro ? (
+          <TouchableOpacity
+            style={styles.proButton}
+            onPress={handleProPress}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.proButtonText}>PRO</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
       <ScrollView
         style={styles.scroll}
@@ -384,12 +396,12 @@ export default function HomeScreen({ navigation }) {
           <ArrowRight size={24} color={colors.primaryText} strokeWidth={2} />
         </TouchableOpacity>
 
-        {/* Limited Offer Banner — без скелетона; показываем только после загрузки цикла (нет мигания/скачка 23:00) */}
-        {showBanner ? (
+        {/* Limited Offer Banner — только для не-Pro; без скелетона после загрузки цикла */}
+        {showBanner && !isPro ? (
           <TouchableOpacity style={styles.banner} activeOpacity={0.9} onPress={openOfferSheet}>
             <View style={styles.bannerContent}>
               <Text style={styles.bannerTitle}>{t('home.limitedOffer')}</Text>
-              <Text style={styles.bannerDiscount}>50% OFF</Text>
+              <Text style={styles.bannerDiscount}>{limitedOfferDiscountPercent}% OFF</Text>
               <View style={styles.countdown}>
                 <View style={styles.countdownBox}>
                   <Text style={styles.countdownText}>{formatNum(bannerCountdown.h)}</Text>
@@ -530,7 +542,7 @@ export default function HomeScreen({ navigation }) {
 
           <TouchableOpacity style={styles.offerCta} activeOpacity={0.9} onPress={handleGetOffer}>
             <Text style={styles.offerCtaText}>
-              {t('home.getOfferCta', { discount: '50%' })}
+              {t('home.getOfferCta', { discount: `${limitedOfferDiscountPercent}%` })}
             </Text>
           </TouchableOpacity>
 

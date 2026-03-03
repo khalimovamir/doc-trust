@@ -57,6 +57,25 @@ const FALLBACK_PLANS = [
 
 const OFFER_PRODUCT_ID = 'pro_yearly_offer';
 
+/**
+ * Compute save % for yearly plan: how much cheaper vs paying monthly (12×) or weekly (52×).
+ * Prefers comparison vs monthly if available, else vs weekly. Returns 0–99 or null.
+ */
+function computeYearlySavePercent(yearlyCents, list) {
+  if (!yearlyCents || !list?.length) return null;
+  const monthly = list.find((p) => p.interval === 'monthly');
+  const weekly = list.find((p) => p.interval === 'weekly');
+  const referenceCents = monthly
+    ? 12 * (monthly.price_cents ?? 0)
+    : weekly
+      ? 52 * (weekly.price_cents ?? 0)
+      : 0;
+  if (referenceCents <= 0) return null;
+  const percent = Math.round((1 - yearlyCents / referenceCents) * 100);
+  if (percent <= 0) return null;
+  return Math.min(99, percent);
+}
+
 function formatPrice(cents, currency = 'USD') {
   const symbol = currency === 'USD' ? '$' : currency;
   return `${symbol}${(cents / 100).toFixed(2)}`;
@@ -250,7 +269,7 @@ function createStyles(colors) {
     planInfo: { flex: 1, minWidth: 0, gap: 4 },
     planTitle: {
       fontFamily,
-      fontSize: 20,
+      fontSize: 18,
       fontWeight: '700',
       color: colors.primaryText,
       textTransform: 'uppercase',
@@ -327,6 +346,7 @@ export default function SubscriptionBottomSheet({ visible, onClose, offerId = nu
       const limitedOfferPriceCents = limitedOfferProduct?.price_cents ?? 1499;
       const currency = limitedOfferProduct?.currency ?? 'USD';
       const pricePerWeek = Math.round(limitedOfferPriceCents / 52);
+      const refList = products?.filter((p) => p.interval === 'monthly' || p.interval === 'yearly' || p.interval === 'weekly') ?? [];
       return [{
         product_id: OFFER_PRODUCT_ID,
         interval: 'yearly',
@@ -335,7 +355,7 @@ export default function SubscriptionBottomSheet({ visible, onClose, offerId = nu
         currency,
         trial_days: 0,
         pricePerWeek: `(${formatPrice(pricePerWeek, currency)}${t('subscription.perWeek')})`,
-        savePercent: 40,
+        savePercent: computeYearlySavePercent(limitedOfferPriceCents, refList),
       }];
     }
     let list = products?.length
@@ -352,7 +372,7 @@ export default function SubscriptionBottomSheet({ visible, onClose, offerId = nu
       const baseCents = p.price_cents ?? 0;
       const currency = p.currency ?? 'USD';
       const pricePerWeek = p.interval === 'yearly' ? Math.round(baseCents / 52) : null;
-      const savePerc = p.interval === 'yearly' ? 40 : null;
+      const savePerc = p.interval === 'yearly' ? computeYearlySavePercent(baseCents, list) : null;
       return {
         product_id: p.product_id || (p.interval === 'monthly' ? 'pro_monthly' : p.interval === 'weekly' ? 'pro_weekly' : 'pro_yearly'),
         interval: p.interval,

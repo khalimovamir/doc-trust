@@ -7,8 +7,9 @@
  */
 
 import React, { useMemo, useEffect, useRef } from 'react';
-import { View, StyleSheet, ActivityIndicator, Linking, Platform } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
+import * as SplashScreen from 'expo-splash-screen';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
@@ -186,6 +187,21 @@ function AppNavigatorInner() {
           component={SignInScreen}
           options={{ ...authHeaderOptions, headerShown: true, title: '' }}
         />
+        <AppStack.Screen
+          name="EnterEmail"
+          component={EnterEmailScreen}
+          options={{ ...authHeaderOptions, headerShown: true, title: '' }}
+        />
+        <AppStack.Screen
+          name="VerifyCode"
+          component={VerifyCodeScreen}
+          options={{ ...authHeaderOptions, headerShown: true, title: '' }}
+        />
+        <AppStack.Screen
+          name="ChangePassword"
+          component={ChangePasswordScreen}
+          options={{ ...authHeaderOptions, headerShown: true, title: '' }}
+        />
         <AppStack.Screen name="Scanner" component={ScannerScreen} />
         <AppStack.Screen
           name="PasteText"
@@ -250,13 +266,26 @@ export default function AppNavigator({ onNavigationRefReady }) {
     return () => sub.remove();
   }, [showAuthStack, openSubscriptionBottomSheet]);
 
+  // Пока грузятся сессия и guest — не скрываем нативный splash и не показываем лоадер,
+  // чтобы не было мигания "Loading". Скрываем splash только когда приложение готово.
   if (isLoading || !guestLoaded) {
-    return (
-      <View style={[styles.loader, { backgroundColor: colors.primaryBackground }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
+    return null;
   }
+
+  return <AppNavigatorContent
+    showAuthStack={showAuthStack}
+    navigationRef={navigationRef}
+    onNavigationRefReady={onNavigationRefReady}
+  />;
+}
+
+function AppNavigatorContent({ showAuthStack, navigationRef, onNavigationRefReady }) {
+  useEffect(() => {
+    SplashScreen.hideAsync();
+  }, []);
+  useEffect(() => {
+    onNavigationRefReady?.(navigationRef);
+  }, [onNavigationRefReady, navigationRef]);
 
   // На Android при смене Auth → App один и тот же NavigationContainer может сохранять
   // нативное состояние и ломать тачи. Рендерим два разных контейнера с ключами:
@@ -272,10 +301,3 @@ export default function AppNavigator({ onNavigationRefReady }) {
   );
 }
 
-const styles = StyleSheet.create({
-  loader: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-});
