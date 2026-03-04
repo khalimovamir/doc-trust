@@ -23,6 +23,8 @@ import PrimaryButton from '../components/PrimaryButton';
 import IconButton from '../components/IconButton';
 import { CommonActions } from '@react-navigation/native';
 import { signUpWithEmail } from '../lib/auth';
+import { useSubscription } from '../context/SubscriptionContext';
+import { revenueCatLogIn } from '../lib/revenueCat';
 import { isValidEmail } from '../lib/validation';
 
 function createStyles(colors) {
@@ -43,6 +45,7 @@ function createStyles(colors) {
 export default function SignUpScreen({ navigation }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
+  const { refreshSubscription } = useSubscription();
   const styles = useMemo(() => StyleSheet.create(createStyles(colors)), [colors]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -73,13 +76,10 @@ export default function SignUpScreen({ navigation }) {
     }
     setLoading(true);
     try {
-      await signUpWithEmail(trimmedEmail, password);
-      // If we're in AppStack (guest opened SignUp from Settings), go to Home
-      const root = navigation.getParent();
-      const routeNames = root?.getState()?.routeNames ?? [];
-      if (routeNames.includes('Home')) {
-        root.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'Home' }] }));
-      }
+      const { user: signedUpUser } = await signUpWithEmail(trimmedEmail, password);
+      if (signedUpUser?.id) await revenueCatLogIn(signedUpUser.id).catch(() => {});
+      navigation.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'Home' }] }));
+      await refreshSubscription?.();
     } catch (e) {
       setPasswordError(e?.message || t('auth.signUpFailed'));
       Alert.alert(t('auth.signUpError'), e?.message || t('auth.couldNotCreateAccount'));

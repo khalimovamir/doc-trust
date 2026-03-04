@@ -23,9 +23,11 @@ import { fontFamily, useTheme } from '../theme';
 import { CommonActions } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { useGuest } from '../context/GuestContext';
+import { useSubscription } from '../context/SubscriptionContext';
 import { openPrivacyPolicy, openTermsOfUse } from '../lib/legalUrls';
 import { signInWithGoogle, signInWithApple } from '../lib/auth';
 import { syncGuestToUserData } from '../lib/guestSync';
+import { revenueCatLogIn } from '../lib/revenueCat';
 
 const LOGO_SIZE = 88;
 const LOGO_GAP = 20;
@@ -71,6 +73,7 @@ export default function GetStartedScreen({ navigation, route }) {
   const colorScheme = useColorScheme();
   const { user } = useAuth();
   const { setGuestMode, clearGuestMode } = useGuest();
+  const { refreshSubscription } = useSubscription();
   const styles = useMemo(() => StyleSheet.create(createStyles(colors)), [colors]);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [appleLoading, setAppleLoading] = useState(false);
@@ -85,21 +88,18 @@ export default function GetStartedScreen({ navigation, route }) {
     clearGuestMode();
     (async () => {
       await syncGuestToUserData(user.id);
+      await revenueCatLogIn(user.id).catch(() => {});
       if (cancelled) return;
       syncTimeoutRef.current = setTimeout(() => {
-        const stack = navigation.getParent();
-        if (stack) {
-          stack.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'Home' }] }));
-        } else if (navigation.canGoBack()) {
-          navigation.goBack();
-        }
+        navigation.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'Home' }] }));
+        refreshSubscription?.();
       }, 50);
     })();
     return () => {
       cancelled = true;
       if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
     };
-  }, [fromSettings, user?.id, navigation, clearGuestMode]);
+  }, [fromSettings, user?.id, navigation, clearGuestMode, refreshSubscription]);
 
   const handleApple = async () => {
     if (Platform.OS !== 'ios') return;

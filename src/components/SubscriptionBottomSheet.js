@@ -24,6 +24,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Check, X, Scan, GitCompare, ShieldCheck, MessageCircleQuestion } from 'lucide-react-native';
 import { IconAlertTriangleFilled } from '@tabler/icons-react-native';
 import Svg, { Circle } from 'react-native-svg';
+
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
 import { fontFamily, spacing, borderRadius, useTheme } from '../theme';
 import { useSubscription } from '../context/SubscriptionContext';
 import { useAuth } from '../context/AuthContext';
@@ -33,6 +36,7 @@ import {
   getRevenueCatOfferings,
   purchaseRevenueCatPackage,
   restoreRevenueCatPurchases,
+  hasProFromCustomerInfo,
 } from '../lib/revenueCat';
 import { openPrivacyPolicy, openTermsOfUse } from '../lib/legalUrls';
 
@@ -339,22 +343,10 @@ export default function SubscriptionBottomSheet({ visible, onClose, offerId = nu
   const [submitting, setSubmitting] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [showCloseButton, setShowCloseButton] = useState(false);
-  const [progressPercent, setProgressPercent] = useState(0);
   const subscriptionOpenPendingRef = useRef(false);
-  const progressRafRef = useRef(null);
-  const progressStartRef = useRef(0);
+  const progressAnim = useRef(new Animated.Value(0)).current;
+  const progressTimingRef = useRef(null);
   const sheetTranslateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
-
-  const tickProgress = useCallback(() => {
-    const elapsed = Date.now() - progressStartRef.current;
-    const p = Math.min(1, elapsed / CLOSE_DELAY_MS);
-    setProgressPercent(p);
-    if (p >= 1) {
-      setShowCloseButton(true);
-      return;
-    }
-    progressRafRef.current = requestAnimationFrame(tickProgress);
-  }, []);
 
   const runSubscriptionOpenAnimation = useCallback(() => {
     if (!subscriptionOpenPendingRef.current) return;
@@ -427,27 +419,34 @@ export default function SubscriptionBottomSheet({ visible, onClose, offerId = nu
     if (visible) {
       setSelectedPlanIndex(0);
       setShowCloseButton(false);
-      setProgressPercent(0);
+      progressAnim.setValue(0);
       sheetTranslateY.setValue(SCREEN_HEIGHT);
       subscriptionOpenPendingRef.current = true;
-      progressStartRef.current = Date.now();
-      progressRafRef.current = requestAnimationFrame(tickProgress);
+      progressTimingRef.current = Animated.timing(progressAnim, {
+        toValue: 1,
+        duration: CLOSE_DELAY_MS,
+        easing: Easing.linear,
+        useNativeDriver: false,
+      });
+      progressTimingRef.current.start(({ finished }) => {
+        if (finished) setShowCloseButton(true);
+      });
       return () => {
-        if (progressRafRef.current != null) {
-          cancelAnimationFrame(progressRafRef.current);
-          progressRafRef.current = null;
+        if (progressTimingRef.current) {
+          progressTimingRef.current.stop();
+          progressTimingRef.current = null;
         }
       };
     } else {
       sheetTranslateY.setValue(SCREEN_HEIGHT);
       setShowCloseButton(false);
-      setProgressPercent(0);
-      if (progressRafRef.current != null) {
-        cancelAnimationFrame(progressRafRef.current);
-        progressRafRef.current = null;
+      progressAnim.setValue(0);
+      if (progressTimingRef.current) {
+        progressTimingRef.current.stop();
+        progressTimingRef.current = null;
       }
     }
-  }, [visible, sheetTranslateY, tickProgress]);
+  }, [visible, sheetTranslateY, progressAnim]);
 
   const closeSheet = () => {
     Animated.timing(sheetTranslateY, {
@@ -467,7 +466,7 @@ export default function SubscriptionBottomSheet({ visible, onClose, offerId = nu
       const result = await restoreRevenueCatPurchases();
       if (result.customerInfo) {
         await refreshSubscription();
-        const hasPro = result.customerInfo?.entitlements?.active?.['DocTrust Pro'] != null;
+        const hasPro = hasProFromCustomerInfo(result.customerInfo);
         if (hasPro) {
           Alert.alert(t('subscription.youHavePro'), '', [{ text: t('common.done'), onPress: closeSheet }]);
           closeSheet();
@@ -551,7 +550,7 @@ export default function SubscriptionBottomSheet({ visible, onClose, offerId = nu
             ) : (
               <View style={styles.appBarClose} pointerEvents="none">
                 <Svg width={PROGRESS_RING_SIZE} height={PROGRESS_RING_SIZE} style={styles.progressRingSvg}>
-                  <Circle
+                  <AnimatedCircle
                     cx={PROGRESS_RING_CX}
                     cy={PROGRESS_RING_CY}
                     r={PROGRESS_RING_R}
@@ -559,7 +558,10 @@ export default function SubscriptionBottomSheet({ visible, onClose, offerId = nu
                     strokeWidth={PROGRESS_RING_STROKE}
                     fill="none"
                     strokeDasharray={`${PROGRESS_CIRCUMFERENCE} ${PROGRESS_CIRCUMFERENCE}`}
-                    strokeDashoffset={PROGRESS_CIRCUMFERENCE * (1 - progressPercent)}
+                    strokeDashoffset={progressAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [PROGRESS_CIRCUMFERENCE, 0],
+                    })}
                     strokeLinecap="round"
                     transform={`rotate(-90, ${PROGRESS_RING_CX}, ${PROGRESS_RING_CY})`}
                   />

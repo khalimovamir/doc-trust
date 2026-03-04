@@ -12,8 +12,14 @@ try {
   Purchases = require('react-native-purchases').default;
 } catch (_) {}
 
-/** Must match RevenueCat entitlement Identifier (e.g. "pro" or "DocTrust Pro"). */
-const ENTITLEMENT_ID = 'DocTrust Pro';
+/** RevenueCat entitlement Identifier. Must match dashboard (e.g. "DocTrust Pro"). "pro" kept for compatibility. */
+const ENTITLEMENT_IDS = ['DocTrust Pro', 'pro'];
+
+function hasProEntitlement(customerInfo) {
+  const active = customerInfo?.entitlements?.active;
+  if (!active) return false;
+  return ENTITLEMENT_IDS.some((id) => active[id] != null);
+}
 
 export function isRevenueCatAvailable() {
   return Purchases != null;
@@ -53,10 +59,21 @@ export async function configureRevenueCat(userId = null) {
 
 /**
  * Identify user after login. Call on login.
+ * Transfers/merges anonymous subscription to this userId in RevenueCat.
  */
 export async function revenueCatLogIn(userId) {
   if (!Purchases || !userId) return;
-  await Purchases.logIn(userId);
+  try {
+    const { customerInfo } = await Purchases.logIn(userId);
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.warn('[RevenueCat] logIn ok', userId, 'entitlements:', customerInfo?.entitlements?.active ? Object.keys(customerInfo.entitlements.active) : []);
+    }
+  } catch (e) {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.warn('[RevenueCat] logIn failed', userId, e?.message);
+    }
+    throw e;
+  }
 }
 
 /**
@@ -94,13 +111,22 @@ export async function purchaseRevenueCatPackage(pkg) {
 
 /**
  * Check if user has active PRO entitlement from RevenueCat.
+ * Uses "DocTrust Pro" (or "pro") so it matches your RevenueCat entitlement identifier.
  * @returns {Promise<boolean>}
  */
 export async function getRevenueCatIsPro() {
   if (!Purchases) return false;
   const customerInfo = await Purchases.getCustomerInfo();
-  const entitlement = customerInfo?.entitlements?.active?.[ENTITLEMENT_ID];
-  return entitlement != null;
+  return hasProEntitlement(customerInfo);
+}
+
+/**
+ * Check PRO from a CustomerInfo object (e.g. after purchase or restore).
+ * @param {import('react-native-purchases').CustomerInfo | null | undefined} customerInfo
+ * @returns {boolean}
+ */
+export function hasProFromCustomerInfo(customerInfo) {
+  return hasProEntitlement(customerInfo);
 }
 
 /**

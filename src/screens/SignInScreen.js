@@ -26,7 +26,9 @@ import { CommonActions } from '@react-navigation/native';
 import { signInWithEmail } from '../lib/auth';
 import { isValidEmail } from '../lib/validation';
 import { useGuest } from '../context/GuestContext';
+import { useSubscription } from '../context/SubscriptionContext';
 import { syncGuestToUserData } from '../lib/guestSync';
+import { revenueCatLogIn } from '../lib/revenueCat';
 
 function createStyles(colors) {
   return {
@@ -49,6 +51,7 @@ export default function SignInScreen({ navigation }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const { clearGuestMode } = useGuest();
+  const { refreshSubscription } = useSubscription();
   const styles = useMemo(() => StyleSheet.create(createStyles(colors)), [colors]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -77,12 +80,12 @@ export default function SignInScreen({ navigation }) {
     try {
       const { user: signedInUser } = await signInWithEmail(trimmedEmail, password);
       clearGuestMode();
-      if (signedInUser?.id) await syncGuestToUserData(signedInUser.id);
-      // If we're in AppStack (guest opened SignIn from Settings/Get Started), go to Home
-      const stack = navigation.getParent();
-      if (stack) {
-        stack.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'Home' }] }));
+      if (signedInUser?.id) {
+        await syncGuestToUserData(signedInUser.id);
+        await revenueCatLogIn(signedInUser.id).catch(() => {});
       }
+      navigation.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'Home' }] }));
+      await refreshSubscription?.();
     } catch (e) {
       setPasswordError(e?.message || t('auth.signInFailed'));
       Alert.alert(t('auth.signInError'), e?.message || t('auth.couldNotSignIn'));

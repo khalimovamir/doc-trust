@@ -272,8 +272,21 @@ export async function persistOfferStatesForPostLogout(userId) {
 }
 
 /**
+ * First day of current month in UTC (YYYY-MM-DD). Must match DB: (date_trunc('month', now()))::date.
+ * Using local date + toISOString() could yield the previous month in UTC and create duplicate rows.
+ */
+function getCurrentPeriodStartUTC() {
+  const now = new Date();
+  const y = now.getUTCFullYear();
+  const m = String(now.getUTCMonth() + 1).padStart(2, '0');
+  return `${y}-${m}-01`;
+}
+
+/**
  * Sync guest feature usage from AsyncStorage to Supabase (on login: guest → user).
- * Reads GUEST_FEATURE_USAGE_KEY and POST_LOGOUT_USAGE_KEY, merges with free-tier defaults, then upserts user_feature_usage (no RPC, same as offer states).
+ * Reads GUEST_FEATURE_USAGE_KEY and POST_LOGOUT_USAGE_KEY, merges with free-tier defaults,
+ * then upserts user_feature_usage for the current period only. Uses UTC month start so the
+ * same row is updated as by ensure_user_feature_usage (no duplicate rows per user/feature).
  */
 export async function syncGuestUsageToSupabase(userId) {
   if (!userId) return;
@@ -294,10 +307,7 @@ export async function syncGuestUsageToSupabase(userId) {
         if (post && typeof post === 'object') Object.assign(merged, post);
       } catch (_) {}
     }
-    const periodStart = new Date();
-    periodStart.setDate(1);
-    periodStart.setHours(0, 0, 0, 0);
-    const periodStr = periodStart.toISOString().slice(0, 10);
+    const periodStr = getCurrentPeriodStartUTC();
     const remaining = (key) => Math.max(0, Number(merged[key]) ?? FREE_TIER_USAGE_DEFAULT[key] ?? 0);
     const rows = [
       { user_id: userId, feature: 'scan_document', period_start: periodStr, remaining_count: remaining('scan_document') },
