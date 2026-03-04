@@ -21,6 +21,7 @@ import { JurisdictionProvider } from './src/context/JurisdictionContext';
 import { useAuth } from './src/context/AuthContext';
 import { updateProfile } from './src/lib/profile';
 import { SubscriptionProvider } from './src/context/SubscriptionContext';
+import SubscriptionSheetRenderer from './src/components/SubscriptionSheetRenderer';
 import { AnalysisProvider } from './src/context/AnalysisContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import { ensureI18n, getAppLanguageCode } from './src/i18n';
@@ -212,6 +213,7 @@ function App() {
                     <AppLanguageProvider>
                     <PendingJurisdictionSync>
                       <SubscriptionProvider>
+                        <SubscriptionSheetRenderer />
                         <AnalysisProvider>
                           <AppNavigator onNavigationRefReady={(ref) => { navigationRefHolder.current = ref; }} />
                         </AnalysisProvider>

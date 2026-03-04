@@ -5,6 +5,9 @@
 
 import { supabase } from './supabase';
 
+/** Error code returned by Edge Functions when input is not a real document (show documentValidation dialog). */
+export const NOT_A_DOCUMENT = 'NOT_A_DOCUMENT';
+
 /**
  * Analyze a single document (legal risks, summary, guidance)
  * @param {string} documentText - Raw document text

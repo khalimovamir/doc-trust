@@ -19,7 +19,7 @@ import { fontFamily, spacing, useTheme } from '../theme';
 import { useAuth } from '../context/AuthContext';
 import { useJurisdiction } from '../context/JurisdictionContext';
 import { useSubscription } from '../context/SubscriptionContext';
-import { compareDocuments } from '../lib/ai';
+import { compareDocuments, NOT_A_DOCUMENT } from '../lib/ai';
 import { getAppLanguageCode } from '../i18n';
 
 function createStyles(colors) {
@@ -75,6 +75,14 @@ export default function ComparingScreen({ navigation, route }) {
         );
       } catch (e) {
         if (cancelled) return;
+        if (e?.message === NOT_A_DOCUMENT) {
+          Alert.alert(
+            t('documentValidation.title'),
+            t('documentValidation.message'),
+            [{ text: t('common.back'), onPress: () => navigation.goBack() }]
+          );
+          return;
+        }
         Alert.alert(
           t('comparing.errorTitle'),
           e?.message || t('comparing.errorMessage'),

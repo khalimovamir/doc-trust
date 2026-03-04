@@ -15,10 +15,8 @@ import {
   Switch,
   Alert,
   Platform,
-  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { PRIVACY_POLICY_URL, TERMS_OF_USE_URL } from '../lib/legalUrls';
 import {
   ChevronRight,
   Check,
@@ -41,6 +39,7 @@ import { useSubscription } from '../context/SubscriptionContext';
 import { openLanguageSettings } from '../openLanguageSettings';
 import { requestReviewFromSettings } from '../lib/requestReview';
 import { JURISDICTION_CODES } from '../lib/jurisdictions';
+import { openPrivacyPolicy, openTermsOfUse } from '../lib/legalUrls';
 
 function SettingsRow({
   icon,
@@ -258,7 +257,7 @@ export default function SettingsScreen({ navigation }) {
             subtitle={t('settings.privacyPolicySubtitle')}
             rowStyles={styles}
             colors={colors}
-            onPress={() => Linking.openURL(PRIVACY_POLICY_URL).catch(() => {})}
+            onPress={openPrivacyPolicy}
           />
           <SettingsRow
             icon={<FileText size={22} color={colors.primary} strokeWidth={2} />}
@@ -266,7 +265,7 @@ export default function SettingsScreen({ navigation }) {
             subtitle={t('settings.termsOfUseSubtitle')}
             rowStyles={styles}
             colors={colors}
-            onPress={() => Linking.openURL(TERMS_OF_USE_URL).catch(() => {})}
+            onPress={openTermsOfUse}
           />
           <SettingsRow
             icon={<Lightbulb size={22} color={colors.primary} strokeWidth={2} />}

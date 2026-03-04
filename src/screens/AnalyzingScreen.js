@@ -20,6 +20,7 @@ import { useJurisdiction } from '../context/JurisdictionContext';
 import { analyzeDocument } from '../lib/ai';
 import { getTextFromImageUri } from '../lib/uploadDocument';
 import { getAppLanguageCode } from '../i18n';
+import { NOT_A_DOCUMENT } from '../lib/ai';
 
 function createStyles(colors) {
   return {
@@ -48,7 +49,6 @@ export default function AnalyzingScreen({ navigation, route }) {
       navigation.replace('Home');
       return;
     }
-
     let cancelled = false;
     const run = async () => {
       let documentText = documentTextParam;
@@ -102,6 +102,14 @@ export default function AnalyzingScreen({ navigation, route }) {
         );
       } catch (e) {
         if (cancelled) return;
+        if (e?.message === NOT_A_DOCUMENT) {
+          Alert.alert(
+            t('documentValidation.title'),
+            t('documentValidation.message'),
+            [{ text: t('common.back'), onPress: () => navigation.goBack() }]
+          );
+          return;
+        }
         Alert.alert(
           t('common.error'),
           e?.message || 'Could not analyze document. Please try again.',

@@ -60,7 +60,8 @@ export function AuthProvider({ children }) {
       const result = supabase.auth.onAuthStateChange?.((event, s) => {
         try {
           if (event === 'SIGNED_OUT' || !s?.user) {
-            revenueCatLogOut().catch(() => {});
+            // Only call RevenueCat logOut when user explicitly signed out (not on initial load when already anonymous)
+            if (event === 'SIGNED_OUT') revenueCatLogOut().catch(() => {});
             setSession(null);
           } else {
             setSession(s);

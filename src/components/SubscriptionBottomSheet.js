@@ -3,7 +3,7 @@
  * Matches Figma: app bar with close (left), illustration, hero, 2 feature cards, plan cards, Continue, footer, handle.
  */
 
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   View,
@@ -12,13 +12,13 @@ import {
   Modal,
   Pressable,
   Animated,
+  Easing,
   Dimensions,
   ScrollView,
   TouchableOpacity,
   Alert,
   ActivityIndicator,
   Image,
-  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Check, X, Scan, GitCompare, ShieldCheck, MessageCircleQuestion } from 'lucide-react-native';
@@ -34,15 +34,14 @@ import {
   purchaseRevenueCatPackage,
   restoreRevenueCatPurchases,
 } from '../lib/revenueCat';
-import { PRIVACY_POLICY_URL, TERMS_OF_USE_URL } from '../lib/legalUrls';
+import { openPrivacyPolicy, openTermsOfUse } from '../lib/legalUrls';
 
 const CLOSE_DELAY_MS = 4000;
-const PROGRESS_RING_DIAMETER = 32;
+const PROGRESS_RING_SIZE = 40;
 const PROGRESS_RING_STROKE = 4;
-const PROGRESS_RING_R = (PROGRESS_RING_DIAMETER - PROGRESS_RING_STROKE) / 2;
 const PROGRESS_RING_CX = 20;
 const PROGRESS_RING_CY = 20;
-const PROGRESS_RING_SVG_SIZE = 40;
+const PROGRESS_RING_R = 14;
 const PROGRESS_CIRCUMFERENCE = 2 * Math.PI * PROGRESS_RING_R;
 
 const FEATURE_CARDS = [
@@ -95,10 +94,10 @@ function createStyles(colors) {
     },
     sheetColumn: {
       position: 'absolute',
+      left: 0,
       right: 0,
-      top: 0,
       bottom: 0,
-      width: SCREEN_WIDTH,
+      width: '100%',
       height: SCREEN_HEIGHT,
       flexDirection: 'column',
       alignItems: 'stretch',
@@ -340,9 +339,21 @@ export default function SubscriptionBottomSheet({ visible, onClose, offerId = nu
   const [submitting, setSubmitting] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [showCloseButton, setShowCloseButton] = useState(false);
-  const [closeProgress, setCloseProgress] = useState(0);
-  const closeProgressRef = useRef(null);
-  const sheetTranslateX = useRef(new Animated.Value(SCREEN_WIDTH)).current;
+  const [progressPercent, setProgressPercent] = useState(0);
+  const subscriptionOpenPendingRef = useRef(false);
+  const progressIntervalRef = useRef(null);
+  const sheetTranslateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+
+  const runSubscriptionOpenAnimation = useCallback(() => {
+    if (!subscriptionOpenPendingRef.current) return;
+    subscriptionOpenPendingRef.current = false;
+    Animated.timing(sheetTranslateY, {
+      toValue: 0,
+      duration: 320,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [sheetTranslateY]);
 
   const plans = useMemo(() => {
     const isLimitedOffer = offerProductId === OFFER_PRODUCT_ID;
@@ -404,42 +415,44 @@ export default function SubscriptionBottomSheet({ visible, onClose, offerId = nu
     if (visible) {
       setSelectedPlanIndex(0);
       setShowCloseButton(false);
-      setCloseProgress(0);
-      sheetTranslateX.setValue(SCREEN_WIDTH);
-      Animated.spring(sheetTranslateX, {
-        toValue: 0,
-        useNativeDriver: false,
-        tension: 65,
-        friction: 11,
-      }).start();
+      setProgressPercent(0);
+      sheetTranslateY.setValue(SCREEN_HEIGHT);
+      subscriptionOpenPendingRef.current = true;
       const start = Date.now();
-      closeProgressRef.current = setInterval(() => {
-        const elapsed = Date.now() - start;
-        const p = Math.min(1, elapsed / CLOSE_DELAY_MS);
-        setCloseProgress(p);
+      progressIntervalRef.current = setInterval(() => {
+        const p = Math.min(1, (Date.now() - start) / CLOSE_DELAY_MS);
+        setProgressPercent(p);
         if (p >= 1) {
-          if (closeProgressRef.current) clearInterval(closeProgressRef.current);
-          closeProgressRef.current = null;
+          if (progressIntervalRef.current) {
+            clearInterval(progressIntervalRef.current);
+            progressIntervalRef.current = null;
+          }
           setShowCloseButton(true);
         }
       }, 50);
+      return () => {
+        if (progressIntervalRef.current) {
+          clearInterval(progressIntervalRef.current);
+          progressIntervalRef.current = null;
+        }
+      };
     } else {
-      sheetTranslateX.setValue(SCREEN_WIDTH);
-      if (closeProgressRef.current) {
-        clearInterval(closeProgressRef.current);
-        closeProgressRef.current = null;
+      sheetTranslateY.setValue(SCREEN_HEIGHT);
+      setShowCloseButton(false);
+      setProgressPercent(0);
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
       }
     }
-    return () => {
-      if (closeProgressRef.current) clearInterval(closeProgressRef.current);
-    };
-  }, [visible, sheetTranslateX]);
+  }, [visible, sheetTranslateY]);
 
   const closeSheet = () => {
-    Animated.timing(sheetTranslateX, {
-      toValue: SCREEN_WIDTH,
-      duration: 220,
-      useNativeDriver: false,
+    Animated.timing(sheetTranslateY, {
+      toValue: SCREEN_HEIGHT,
+      duration: 260,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: true,
     }).start(({ finished }) => {
       if (finished) onClose?.();
     });
@@ -517,17 +530,12 @@ export default function SubscriptionBottomSheet({ visible, onClose, offerId = nu
   if (!visible) return null;
 
   return (
-    <Modal
-      transparent
-      animationType="none"
-      visible={visible}
-      onRequestClose={closeSheet}
-    >
-      <Pressable style={styles.backdrop} />
+    <Modal transparent animationType="none" visible={visible} onRequestClose={closeSheet}>
+      <Pressable style={styles.backdrop} onPress={closeSheet} />
       <Animated.View
-        style={[styles.sheetColumn, { transform: [{ translateX: sheetTranslateX }] }]}
+        style={[styles.sheetColumn, { transform: [{ translateY: sheetTranslateY }] }]}
       >
-        <View style={styles.sheet}>
+        <View style={styles.sheet} onLayout={runSubscriptionOpenAnimation}>
           <View style={[styles.appBar, { paddingTop: Math.max(insets.top, spacing.md) + 8 }]}>
             {showCloseButton ? (
               <TouchableOpacity
@@ -540,7 +548,7 @@ export default function SubscriptionBottomSheet({ visible, onClose, offerId = nu
               </TouchableOpacity>
             ) : (
               <View style={styles.appBarClose} pointerEvents="none">
-                <Svg width={PROGRESS_RING_SVG_SIZE} height={PROGRESS_RING_SVG_SIZE} style={styles.progressRingSvg}>
+                <Svg width={PROGRESS_RING_SIZE} height={PROGRESS_RING_SIZE} style={styles.progressRingSvg}>
                   <Circle
                     cx={PROGRESS_RING_CX}
                     cy={PROGRESS_RING_CY}
@@ -548,9 +556,10 @@ export default function SubscriptionBottomSheet({ visible, onClose, offerId = nu
                     stroke={colors.tertiary}
                     strokeWidth={PROGRESS_RING_STROKE}
                     fill="none"
-                    strokeDasharray={PROGRESS_CIRCUMFERENCE}
-                    strokeDashoffset={PROGRESS_CIRCUMFERENCE * (1 - closeProgress)}
-                    transform={`rotate(-90 ${PROGRESS_RING_CX} ${PROGRESS_RING_CY})`}
+                    strokeDasharray={`${PROGRESS_CIRCUMFERENCE} ${PROGRESS_CIRCUMFERENCE}`}
+                    strokeDashoffset={PROGRESS_CIRCUMFERENCE * (1 - progressPercent)}
+                    strokeLinecap="round"
+                    transform={`rotate(-90, ${PROGRESS_RING_CX}, ${PROGRESS_RING_CY})`}
                   />
                 </Svg>
               </View>
@@ -694,7 +703,7 @@ export default function SubscriptionBottomSheet({ visible, onClose, offerId = nu
               </TouchableOpacity>
 
               <View style={styles.footerLinks}>
-                <TouchableOpacity onPress={() => Linking.openURL(TERMS_OF_USE_URL).catch(() => {})}>
+                <TouchableOpacity onPress={openTermsOfUse}>
                   <Text style={styles.footerLink}>Terms of Use</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={handleRestore} disabled={restoring}>
@@ -702,7 +711,7 @@ export default function SubscriptionBottomSheet({ visible, onClose, offerId = nu
                     {restoring ? t('subscription.restoring') : t('subscription.restore')}
                   </Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => Linking.openURL(PRIVACY_POLICY_URL).catch(() => {})}>
+                <TouchableOpacity onPress={openPrivacyPolicy}>
                   <Text style={styles.footerLink}>Privacy Policy</Text>
                 </TouchableOpacity>
               </View>

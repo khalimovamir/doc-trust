@@ -16,7 +16,6 @@ import {
   ActivityIndicator,
   Platform,
   useColorScheme,
-  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Mail } from 'lucide-react-native';
@@ -24,9 +23,9 @@ import { fontFamily, useTheme } from '../theme';
 import { CommonActions } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { useGuest } from '../context/GuestContext';
+import { openPrivacyPolicy, openTermsOfUse } from '../lib/legalUrls';
 import { signInWithGoogle, signInWithApple } from '../lib/auth';
 import { syncGuestToUserData } from '../lib/guestSync';
-import { PRIVACY_POLICY_URL, TERMS_OF_USE_URL } from '../lib/legalUrls';
 
 const LOGO_SIZE = 88;
 const LOGO_GAP = 20;
@@ -130,8 +129,8 @@ export default function GetStartedScreen({ navigation, route }) {
   const handleSignIn = () => {
     navigation.navigate('SignIn');
   };
-  const handlePrivacyPolicy = () => Linking.openURL(PRIVACY_POLICY_URL).catch(() => {});
-  const handleTermsOfUse = () => Linking.openURL(TERMS_OF_USE_URL).catch(() => {});
+  const handlePrivacyPolicy = () => openPrivacyPolicy();
+  const handleTermsOfUse = () => openTermsOfUse();
   const handleSkip = () => {
     setGuestMode(true);
   };

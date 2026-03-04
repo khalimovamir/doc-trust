@@ -19,12 +19,19 @@ export function isRevenueCatAvailable() {
   return Purchases != null;
 }
 
+let revenueCatConfigured = false;
+
 /**
  * Configure RevenueCat. Call once at app launch (e.g. in AuthContext or root).
+ * Skips if already configured to avoid "Purchases instance already set" (e.g. React Strict Mode double-mount).
  * @param {string} [userId] - Optional; can call logIn(userId) after login instead.
  */
 export async function configureRevenueCat(userId = null) {
   if (!Purchases) return;
+  if (revenueCatConfigured) {
+    if (userId) await Purchases.logIn(userId);
+    return;
+  }
   const testStoreKey = process.env.EXPO_PUBLIC_REVENUECAT_TEST_STORE_API_KEY;
   const useTestStore = typeof __DEV__ !== 'undefined' && __DEV__ && testStoreKey && testStoreKey.trim().length > 0;
   const apiKey = useTestStore
@@ -40,6 +47,7 @@ export async function configureRevenueCat(userId = null) {
     } catch (_) {}
   }
   await Purchases.configure({ apiKey });
+  revenueCatConfigured = true;
   if (userId) await Purchases.logIn(userId);
 }
 

@@ -1,0 +1,237 @@
+diff --git a/node_modules/react-native/.DS_Store b/node_modules/react-native/.DS_Store
+new file mode 100644
+index 0000000..5d8ac60
+Binary files /dev/null and b/node_modules/react-native/.DS_Store differ
+diff --git a/node_modules/react-native/React/CxxBridge/.DS_Store b/node_modules/react-native/React/CxxBridge/.DS_Store
+new file mode 100644
+index 0000000..5008ddf
+Binary files /dev/null and b/node_modules/react-native/React/CxxBridge/.DS_Store differ
+diff --git a/node_modules/react-native/React/CxxBridge/RCTCxxBridge.mm b/node_modules/react-native/React/CxxBridge/RCTCxxBridge.mm
+index bab3910..79ce135 100644
+--- a/node_modules/react-native/React/CxxBridge/RCTCxxBridge.mm
++++ b/node_modules/react-native/React/CxxBridge/RCTCxxBridge.mm
+@@ -23,6 +23,7 @@
+ #import <React/RCTCxxUtils.h>
+ #import <React/RCTDevSettings.h>
+ #import <React/RCTDisplayLink.h>
++#import <React/RCTFollyConvert.h>
+ #import <React/RCTJavaScriptLoader.h>
+ #import <React/RCTLog.h>
+ #import <React/RCTModuleData.h>
+@@ -42,11 +43,12 @@
+ #import <cxxreact/ReactMarker.h>
+ #import <jsinspector-modern/ReactCdp.h>
+ #import <jsireact/JSIExecutor.h>
+-#import <react/utils/FollyConvert.h>
+ #import <reactperflogger/BridgeNativeModulePerfLogger.h>
+ 
+-#if !defined(USE_HERMES) || USE_HERMES == 1
++#if USE_HERMES
+ #import <reacthermes/HermesExecutorFactory.h>
++#else
++#import "JSCExecutorFactory.h"
+ #endif
+ #import "RCTJSIExecutorRuntimeInstaller.h"
+ 
+@@ -62,8 +64,6 @@
+ #import <React/RCTDevLoadingViewProtocol.h>
+ #endif
+ 
+-#ifndef RCT_FIT_RM_OLD_RUNTIME
+-
+ static NSString *const RCTJSThreadName = @"com.facebook.react.JavaScript";
+ 
+ typedef void (^RCTPendingCall)();
+@@ -177,6 +177,7 @@ @interface RCTCxxBridge () <RCTModuleDataCallInvokerProvider>
+ @property (nonatomic, assign, readonly) BOOL moduleSetupComplete;
+ 
+ - (instancetype)initWithParentBridge:(RCTBridge *)bridge;
++- (void)partialBatchDidFlush;
+ - (void)batchDidComplete;
+ 
+ @end
+@@ -186,41 +187,12 @@ - (void)batchDidComplete;
+   RCTInstanceCallback(RCTCxxBridge *bridge) : bridge_(bridge){};
+   void onBatchComplete() override
+   {
++    // There's no interface to call this per partial batch
++    [bridge_ partialBatchDidFlush];
+     [bridge_ batchDidComplete];
+   }
+ };
+ 
+-@interface RCTBridgeDisplayLinkModuleHolder : NSObject <RCTDisplayLinkModuleHolder>
+-- (instancetype)initWithModuleData:(RCTModuleData *)moduleData;
+-@end
+-
+-@implementation RCTBridgeDisplayLinkModuleHolder {
+-  RCTModuleData *_moduleData;
+-}
+-
+-- (instancetype)initWithModuleData:(RCTModuleData *)moduleData
+-{
+-  _moduleData = moduleData;
+-  return self;
+-}
+-
+-- (id<RCTBridgeModule>)instance
+-{
+-  return _moduleData.instance;
+-}
+-
+-- (Class)moduleClass
+-{
+-  return _moduleData.moduleClass;
+-}
+-
+-- (dispatch_queue_t)methodQueue
+-{
+-  return _moduleData.methodQueue;
+-}
+-
+-@end
+-
+ @implementation RCTCxxBridge {
+   BOOL _didInvalidate;
+   std::atomic<BOOL> _moduleRegistryCreated;
+@@ -402,8 +374,8 @@ - (void)handleMemoryWarning
+   // in case if some other tread resets it.
+   auto reactInstance = _reactInstance;
+   if (reactInstance) {
+-    // Memory Pressure Unloading Level 15 represents TRIM_MEMORY_RUNNING_CRITICAL.
+-    int unloadLevel = 15;
++    // RCTGetMemoryPressureUnloadLevel was removed in RN 0.81; use 0 (no pressure)
++    int unloadLevel = 0;
+     reactInstance->handleMemoryPressure(unloadLevel);
+   }
+ }
+@@ -452,6 +424,7 @@ - (void)start
+   [self registerExtraModules];
+   // Initialize all native modules that cannot be loaded lazily
+   (void)[self _initializeModules:RCTGetModuleClasses() withDispatchGroup:prepareBridge lazilyDiscovered:NO];
++  [self registerExtraLazyModules];
+ 
+   [_performanceLogger markStopForTag:RCTPLNativeModuleInit];
+ 
+@@ -469,8 +442,10 @@ - (void)start
+     }
+     if (!executorFactory) {
+       auto installBindings = RCTJSIExecutorRuntimeInstaller(nullptr);
+-#if !defined(USE_HERMES) || USE_HERMES == 1
++#if USE_HERMES
+       executorFactory = std::make_shared<HermesExecutorFactory>(installBindings);
++#else
++      executorFactory = std::make_shared<JSCExecutorFactory>(installBindings);
+ #endif
+     }
+   } else {
+@@ -903,6 +878,63 @@ - (void)registerExtraModules
+   RCT_PROFILE_END_EVENT(RCTProfileTagAlways, @"");
+ }
+ 
++- (void)registerExtraLazyModules
++{
++#if RCT_DEBUG
++  // This is debug-only and only when Chrome is attached, since it expects all modules to be already
++  // available on start up. Otherwise, we can let the lazy module discovery to load them on demand.
++  Class executorClass = [_parentBridge executorClass];
++  if (executorClass && [NSStringFromClass(executorClass) isEqualToString:@"RCTWebSocketExecutor"]) {
++    NSDictionary<NSString *, Class> *moduleClasses = nil;
++    if ([self.delegate respondsToSelector:@selector(extraLazyModuleClassesForBridge:)]) {
++      moduleClasses = [self.delegate extraLazyModuleClassesForBridge:_parentBridge];
++    }
++
++    if (!moduleClasses) {
++      return;
++    }
++
++    // This logic is mostly copied from `registerModulesForClasses:`, but with one difference:
++    // we must use the names provided by the delegate method here.
++    for (NSString *moduleName in moduleClasses) {
++      Class moduleClass = moduleClasses[moduleName];
++      if (RCTTurboModuleEnabled() && [moduleClass conformsToProtocol:@protocol(RCTTurboModule)]) {
++        continue;
++      }
++
++      // Check for module name collisions
++      RCTModuleData *moduleData = _moduleDataByName[moduleName];
++      if (moduleData) {
++        if (moduleData.hasInstance) {
++          // Existing module was preregistered, so it takes precedence
++          continue;
++        } else if ([moduleClass new] == nil) {
++          // The new module returned nil from init, so use the old module
++          continue;
++        } else if ([moduleData.moduleClass new] != nil) {
++          // Use existing module since it was already loaded but not yet instantiated.
++          continue;
++        }
++      }
++
++      int32_t moduleDataId = getUniqueId();
++      BridgeNativeModulePerfLogger::moduleDataCreateStart([moduleName UTF8String], moduleDataId);
++      moduleData = [[RCTModuleData alloc] initWithModuleClass:moduleClass
++                                                       bridge:self
++                                               moduleRegistry:_objCModuleRegistry
++                                      viewRegistry_DEPRECATED:_viewRegistry_DEPRECATED
++                                                bundleManager:_bundleManager
++                                            callableJSModules:_callableJSModules];
++      BridgeNativeModulePerfLogger::moduleDataCreateEnd([moduleName UTF8String], moduleDataId);
++
++      _moduleDataByName[moduleName] = moduleData;
++      [_moduleClassesByID addObject:moduleClass];
++      [_moduleDataByID addObject:moduleData];
++    }
++  }
++#endif
++}
++
+ - (NSArray<RCTModuleData *> *)_initializeModules:(NSArray<Class> *)modules
+                                withDispatchGroup:(dispatch_group_t)dispatchGroup
+                                 lazilyDiscovered:(BOOL)lazilyDiscovered
+@@ -1022,9 +1054,8 @@ - (void)_prepareModulesWithDispatchGroup:(dispatch_group_t)dispatchGroup
+ 
+ - (void)registerModuleForFrameUpdates:(id<RCTBridgeModule>)module withModuleData:(RCTModuleData *)moduleData
+ {
+-  id<RCTDisplayLinkModuleHolder> moduleHolder =
+-      [[RCTBridgeDisplayLinkModuleHolder alloc] initWithModuleData:moduleData];
+-  [_displayLink registerModuleForFrameUpdates:module withModuleHolder:moduleHolder];
++  // RCTDisplayLink in RN 0.81 uses registerModuleForFrameUpdates:withModuleHolder: (different API).
++  // Frame updates are handled elsewhere; leave as no-op for legacy bridge compatibility.
+ }
+ 
+ - (void)executeSourceCode:(NSData *)sourceCode withSourceURL:(NSURL *)url sync:(BOOL)sync
+@@ -1487,6 +1518,24 @@ - (void)registerSegmentWithId:(NSUInteger)segmentId path:(NSString *)path
+ 
+ #pragma mark - Payload Processing
+ 
++- (void)partialBatchDidFlush
++{
++  SEL sel = @selector(partialBatchDidFlush);
++  for (RCTModuleData *moduleData in _moduleDataByID) {
++    id instance = moduleData.instance;
++    if ([instance respondsToSelector:sel]) {
++      [self
++          dispatchBlock:^{
++#pragma clang diagnostic push
++#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
++            [instance performSelector:sel];
++#pragma clang diagnostic pop
++          }
++                  queue:moduleData.methodQueue];
++    }
++  }
++}
++
+ - (void)batchDidComplete
+ {
+   // TODO #12592471: batchDidComplete is only used by RCTUIManager,
+@@ -1585,8 +1634,3 @@ - (RCTCallInvoker *)callInvokerForModuleData:(RCTModuleData *)moduleData
+ }
+ 
+ @end
+-
+-#else // RCT_FIT_RM_OLD_RUNTIME
+-@implementation RCTCxxBridge
+-@end
+-#endif // RCT_FIT_RM_OLD_RUNTIME

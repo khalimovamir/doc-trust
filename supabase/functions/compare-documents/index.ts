@@ -48,6 +48,18 @@ const doc2Label = `
 Document 2 (revised):
 `;
 
+/** Ask Gemini if both inputs are real documents suitable for comparison. */
+function validationPrompt(sample1: string, sample2: string): string {
+  return `You are a classifier. For each of the two inputs below, decide if it is a REAL DOCUMENT (contract, agreement, letter, terms, legal text) or NOT (few words, empty, junk, unrelated).
+Reply with ONLY a JSON object: {"document1": true|false, "document2": true|false}
+
+Input 1 (first 2000 chars):
+${sample1}
+
+Input 2 (first 2000 chars):
+${sample2}`;
+}
+
 async function callGemini(apiKey: string, prompt: string): Promise<string> {
   const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
     method: "POST",
@@ -116,6 +128,25 @@ serve(async (req) => {
     }
     const languageStr = typeof language === "string" ? String(language).trim().toLowerCase() || "en" : "en";
     const jurisdictionStr = typeof jurisdiction === "string" ? String(jurisdiction).trim() || "US" : "US";
+
+    const sample1 = String(document1).trim().slice(0, 2000);
+    const sample2 = String(document2).trim().slice(0, 2000);
+    const validationRaw = await callGemini(apiKey, validationPrompt(sample1, sample2));
+    const validationStr = validationRaw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    let doc1Valid = true;
+    let doc2Valid = true;
+    try {
+      const val = JSON.parse(validationStr) as { document1?: boolean; document2?: boolean };
+      doc1Valid = val?.document1 === true;
+      doc2Valid = val?.document2 === true;
+    } catch (_) {}
+    if (!doc1Valid || !doc2Valid) {
+      return new Response(
+        JSON.stringify({ error: "NOT_A_DOCUMENT" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const comparePrompt = buildComparePrompt(languageStr, jurisdictionStr);
     const fullPrompt = comparePrompt + document1.slice(0, 60000) + doc2Label + document2.slice(0, 60000);
     const raw = await callGemini(apiKey, fullPrompt);

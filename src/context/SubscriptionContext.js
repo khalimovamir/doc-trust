@@ -5,7 +5,6 @@
  */
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import SubscriptionBottomSheet from '../components/SubscriptionBottomSheet';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from './AuthContext';
 import { useGuest } from './GuestContext';
@@ -48,6 +47,8 @@ const SubscriptionContext = createContext({
   setGuestSubscription: () => {},
   openSubscriptionBottomSheet: () => {},
   closeSubscriptionBottomSheet: () => {},
+  subscriptionSheetVisible: false,
+  subscriptionSheetParams: { offerId: null, offerProductId: null },
 });
 
 export function SubscriptionProvider({ children }) {
@@ -315,15 +316,11 @@ export function SubscriptionProvider({ children }) {
         guestOfferState: isGuest ? guestOfferState : null,
         openSubscriptionBottomSheet,
         closeSubscriptionBottomSheet,
+        subscriptionSheetVisible,
+        subscriptionSheetParams,
       }}
     >
       {children}
-      <SubscriptionBottomSheet
-        visible={subscriptionSheetVisible}
-        onClose={closeSubscriptionBottomSheet}
-        offerId={subscriptionSheetParams.offerId}
-        offerProductId={subscriptionSheetParams.offerProductId}
-      />
     </SubscriptionContext.Provider>
   );
 }

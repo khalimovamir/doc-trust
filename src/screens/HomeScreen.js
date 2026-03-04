@@ -17,14 +17,15 @@ import {
   Modal,
   Pressable,
   Animated,
+  Easing,
   PanResponder,
   Dimensions,
   Platform,
   Alert,
   ActivityIndicator,
-  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { openPrivacyPolicy, openTermsOfUse } from '../lib/legalUrls';
 import {
   Camera,
   CloudUpload,
@@ -54,7 +55,6 @@ import {
   getRevenueCatOfferings,
   purchaseRevenueCatPackage,
 } from '../lib/revenueCat';
-import { PRIVACY_POLICY_URL, TERMS_OF_USE_URL } from '../lib/legalUrls';
 
 function getRiskLabelKey(score) {
   const s = Number(score);
@@ -118,10 +118,10 @@ function ScanItemCard({ item, onPress, cardStyles, scoreRingStyles, colors }) {
 
 // Фиксированные 4 пункта для bottom sheet оффера (только переводы, не из БД)
 const OFFER_SHEET_FEATURES = [
-  { feature: 'ai_issue_detection', titleKey: 'home.offerFeature1', freeHas: true },   // AI Issue Detection — ✓ FREE, ✓ PRO
-  { feature: 'document_check', titleKey: 'home.offerFeature2', freeHas: false },      // Unlimited document checking
-  { feature: 'ai_lawyer', titleKey: 'home.offerFeature3', freeHas: false },           // Smart AI Lawyer assistant
-  { feature: 'document_compare', titleKey: 'home.offerFeature4', freeHas: false },   // Unlimited document comparing
+  { feature: 'ai_issue_detection', titleKey: 'home.offerFeature1', freeHas: true },   // AI Risk Detection
+  { feature: 'document_check', titleKey: 'home.offerFeature2', freeHas: false },        // Unlimited Document Analysis
+  { feature: 'ai_lawyer', titleKey: 'home.offerFeature3', freeHas: false },            // Your personal legal assistant 24/7
+  { feature: 'document_compare', titleKey: 'home.offerFeature4', freeHas: false },     // Document Comparison
 ];
 
 export default function HomeScreen({ navigation }) {
@@ -287,21 +287,30 @@ export default function HomeScreen({ navigation }) {
     }, [fetchRecentScans])
   );
 
+  const offerSheetOpenPendingRef = useRef(false);
   const openOfferSheet = () => {
+    const h = Number(SCREEN_HEIGHT) || 800;
+    sheetTranslateY.setValue(h);
+    offerSheetOpenPendingRef.current = true;
     setIsOfferSheetVisible(true);
-    sheetTranslateY.setValue(Number(SCREEN_HEIGHT) || 800);
+  };
+  const runOfferSheetOpenAnimation = useCallback(() => {
+    if (!offerSheetOpenPendingRef.current) return;
+    offerSheetOpenPendingRef.current = false;
     Animated.timing(sheetTranslateY, {
       toValue: 0,
-      duration: 250,
-      useNativeDriver: false,
+      duration: 320,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
     }).start();
-  };
+  }, [sheetTranslateY]);
   const closeOfferSheet = () => {
     const h = Number(SCREEN_HEIGHT) || 800;
     Animated.timing(sheetTranslateY, {
       toValue: h,
-      duration: 220,
-      useNativeDriver: false,
+      duration: 260,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: true,
     }).start(({ finished }) => {
       if (finished) setIsOfferSheetVisible(false);
     });
@@ -329,8 +338,9 @@ export default function HomeScreen({ navigation }) {
         const h = Number(SCREEN_HEIGHT) || 800;
         Animated.timing(sheetTranslateY, {
           toValue: h,
-          duration: 220,
-          useNativeDriver: false,
+          duration: 260,
+          easing: Easing.in(Easing.cubic),
+          useNativeDriver: true,
         }).start(({ finished }) => {
           if (finished) setIsOfferSheetVisible(false);
         });
@@ -378,9 +388,9 @@ export default function HomeScreen({ navigation }) {
         }
         Animated.spring(sheetTranslateY, {
           toValue: 0,
-          useNativeDriver: false,
-          tension: 80,
-          friction: 12,
+          useNativeDriver: true,
+          tension: 68,
+          friction: 14,
         }).start();
       },
     })
@@ -400,7 +410,7 @@ export default function HomeScreen({ navigation }) {
             onPress={handleProPress}
             activeOpacity={0.8}
           >
-            <Crown size={22} color="rgba(0,0,0,0.64)" fill="rgba(0,0,0,0.64)" />
+            <Crown size={18} color="rgba(0,0,0,0.64)" fill="rgba(0,0,0,0.64)" />
             <Text style={styles.proButtonText}>PRO</Text>
           </TouchableOpacity>
         ) : null}
@@ -409,6 +419,7 @@ export default function HomeScreen({ navigation }) {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {/* Scan Document Now */}
         <TouchableOpacity style={styles.scanArea} onPress={handleScan} activeOpacity={0.8} disabled={scanning}>
@@ -500,6 +511,7 @@ export default function HomeScreen({ navigation }) {
           style={[styles.offerSheetColumn, { transform: [{ translateY: sheetTranslateY }] }]}
           {...panResponder.panHandlers}
         >
+          <View onLayout={runOfferSheetOpenAnimation}>
           <View style={styles.offerCloseRow}>
             <TouchableOpacity
               style={styles.offerClose}
@@ -526,7 +538,7 @@ export default function HomeScreen({ navigation }) {
             </View>
           </View>
 
-          <Text style={styles.offerSheetTitle}>{t('home.temporaryDiscount')}</Text>
+          <Text style={styles.offerSheetTitle}>{t('home.limitedTimeOffer')}</Text>
 
           {/* Header row */}
           <View style={styles.offerTableHeaderRow}>
@@ -598,14 +610,15 @@ export default function HomeScreen({ navigation }) {
           </TouchableOpacity>
 
           <View style={styles.offerFooterLinks}>
-            <TouchableOpacity onPress={() => Linking.openURL(TERMS_OF_USE_URL).catch(() => {})}>
+            <TouchableOpacity onPress={openTermsOfUse}>
               <Text style={styles.offerFooterLink}>Terms of Use</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => Linking.openURL(PRIVACY_POLICY_URL).catch(() => {})}>
+            <TouchableOpacity onPress={openPrivacyPolicy}>
               <Text style={styles.offerFooterLink}>Privacy Policy</Text>
             </TouchableOpacity>
           </View>
 
+          </View>
           </View>
         </Animated.View>
       </Modal>

@@ -18,6 +18,14 @@ const LANGUAGE_NAMES: Record<string, string> = {
   zh: "Chinese", ja: "Japanese", ko: "Korean", ar: "Arabic", hi: "Hindi",
 };
 
+/** Ask Gemini if the text is a real document (contract, letter, etc.) or junk (few words, empty, unrelated). */
+const validationPrompt = (textSample: string) =>
+  `You are a classifier. Decide if the following input is a REAL DOCUMENT suitable for legal analysis (e.g. contract, agreement, letter, terms, policy) or NOT (e.g. a few words, empty, random text, image caption, unrelated content).
+Reply with ONLY a JSON object, no other text: {"isDocument": true} or {"isDocument": false}
+
+Input (first 4000 chars):
+${textSample}`;
+
 const analysisPrompt = (jurisdiction: string, language: string) => {
   const langName = LANGUAGE_NAMES[language] || language || "English";
   return `You are an expert legal analyst AI. Analyze the following document and return a valid JSON object only (no markdown, no code blocks). CRITICAL: Escape all quotes and newlines inside string values. Use \\n for line breaks in text.
@@ -104,6 +112,24 @@ serve(async (req) => {
     }
     const jurisdictionStr = typeof jurisdiction === "string" ? jurisdiction.trim() || "US" : "US";
     const languageStr = typeof language === "string" ? language.trim().toLowerCase() || "en" : "en";
+
+    const textSample = documentText.trim().slice(0, 4000);
+    const validationRaw = await callGemini(apiKey, validationPrompt(textSample));
+    const validationStr = validationRaw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    let isDocument = true;
+    try {
+      const val = JSON.parse(validationStr) as { isDocument?: boolean };
+      isDocument = val?.isDocument === true;
+    } catch (_) {
+      // If parse fails, proceed with analysis (don't block user)
+    }
+    if (!isDocument) {
+      return new Response(
+        JSON.stringify({ error: "NOT_A_DOCUMENT" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const fullPrompt = analysisPrompt(jurisdictionStr, languageStr) + "\n\n" + documentText.slice(0, 120000);
     const raw = await callGemini(apiKey, fullPrompt);
     const parsed = safeParseJSON(raw);
