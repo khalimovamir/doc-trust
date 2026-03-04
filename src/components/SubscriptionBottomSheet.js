@@ -341,8 +341,20 @@ export default function SubscriptionBottomSheet({ visible, onClose, offerId = nu
   const [showCloseButton, setShowCloseButton] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
   const subscriptionOpenPendingRef = useRef(false);
-  const progressIntervalRef = useRef(null);
+  const progressRafRef = useRef(null);
+  const progressStartRef = useRef(0);
   const sheetTranslateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+
+  const tickProgress = useCallback(() => {
+    const elapsed = Date.now() - progressStartRef.current;
+    const p = Math.min(1, elapsed / CLOSE_DELAY_MS);
+    setProgressPercent(p);
+    if (p >= 1) {
+      setShowCloseButton(true);
+      return;
+    }
+    progressRafRef.current = requestAnimationFrame(tickProgress);
+  }, []);
 
   const runSubscriptionOpenAnimation = useCallback(() => {
     if (!subscriptionOpenPendingRef.current) return;
@@ -418,34 +430,24 @@ export default function SubscriptionBottomSheet({ visible, onClose, offerId = nu
       setProgressPercent(0);
       sheetTranslateY.setValue(SCREEN_HEIGHT);
       subscriptionOpenPendingRef.current = true;
-      const start = Date.now();
-      progressIntervalRef.current = setInterval(() => {
-        const p = Math.min(1, (Date.now() - start) / CLOSE_DELAY_MS);
-        setProgressPercent(p);
-        if (p >= 1) {
-          if (progressIntervalRef.current) {
-            clearInterval(progressIntervalRef.current);
-            progressIntervalRef.current = null;
-          }
-          setShowCloseButton(true);
-        }
-      }, 50);
+      progressStartRef.current = Date.now();
+      progressRafRef.current = requestAnimationFrame(tickProgress);
       return () => {
-        if (progressIntervalRef.current) {
-          clearInterval(progressIntervalRef.current);
-          progressIntervalRef.current = null;
+        if (progressRafRef.current != null) {
+          cancelAnimationFrame(progressRafRef.current);
+          progressRafRef.current = null;
         }
       };
     } else {
       sheetTranslateY.setValue(SCREEN_HEIGHT);
       setShowCloseButton(false);
       setProgressPercent(0);
-      if (progressIntervalRef.current) {
-        clearInterval(progressIntervalRef.current);
-        progressIntervalRef.current = null;
+      if (progressRafRef.current != null) {
+        cancelAnimationFrame(progressRafRef.current);
+        progressRafRef.current = null;
       }
     }
-  }, [visible, sheetTranslateY]);
+  }, [visible, sheetTranslateY, tickProgress]);
 
   const closeSheet = () => {
     Animated.timing(sheetTranslateY, {
